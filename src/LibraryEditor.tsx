@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
+const PREFECTURES = "北海道 青森県 岩手県 宮城県 秋田県 山形県 福島県 茨城県 栃木県 群馬県 埼玉県 千葉県 東京都 神奈川県 新潟県 富山県 石川県 福井県 山梨県 長野県 岐阜県 静岡県 愛知県 三重県 滋賀県 京都府 大阪府 兵庫県 奈良県 和歌山県 鳥取県 島根県 岡山県 広島県 山口県 徳島県 香川県 愛媛県 高知県 福岡県 佐賀県 長崎県 熊本県 大分県 宮崎県 鹿児島県 沖縄県".split(" ");
 import {
   type Dataset,
   type Entry,
@@ -35,7 +36,13 @@ export function LibraryEditor({
     [pane, setPane] = useState<"SHOWS" | "TEMPLATES">("SHOWS"),
     [tourId, setTourId] = useState(""),
     [tourName, setTourName] = useState(""),
-    [type, setType] = useState<"TOUR" | "FANMEETING" | "SPECIAL">("TOUR"),
+    [type, setType] = useState<"TOUR" | "FANMEETING" | "SPECIAL">("SPECIAL"),
+    [singleDate, setSingleDate] = useState(""),
+    [singleVenue, setSingleVenue] = useState(""),
+    [singleRegion, setSingleRegion] = useState(""),
+    [singleFormat, setSingleFormat] = useState<Show["format"]>("OTHER"),
+    [singleSlot, setSingleSlot] = useState("通常"),
+    [multiDay, setMultiDay] = useState(false),
     [time, setTime] = useState(""),
     [text, setText] = useState(""),
     [preview, setPreview] = useState<{
@@ -51,6 +58,10 @@ export function LibraryEditor({
     setPane("SHOWS");
     setTourId("");
     setTourName("");
+    setType("SPECIAL");
+    setSingleDate(""); setSingleVenue(""); setSingleRegion("");
+    setSingleFormat("OTHER"); setSingleSlot("通常"); setMultiDay(false);
+    setTime(""); setText(""); setNewTemplateId(""); setError("");
     setPreview(null);
     setDraft(structuredClone(data));
     onDirty(true);
@@ -63,25 +74,24 @@ export function LibraryEditor({
   const working = draft ?? data;
   const prepareShows = () => {
     try {
-      const selected = working.tours.find((t) => t.id === tourId),
-        count = text.split("\n").filter(line => line.trim()).length,
-        resolvedType = selected?.type ?? type,
-        groupNeeded = resolvedType !== "SPECIAL" || count > 1,
-        resolvedId = selected?.id || (groupNeeded && tourName.trim() ? crypto.randomUUID() : null);
+      const selected = working.tours.find(t => t.id === tourId);
+      const directSingle = !tourId && type === "SPECIAL" && !multiDay;
+      if (directSingle && (!singleDate || !singleVenue.trim()))
+        throw new Error("公演日と会場を入力してください");
+      const rows = directSingle
+        ? [{ date: singleDate, venue: singleVenue.trim(), region: singleRegion,
+             slot: singleSlot.trim() || "通常", format: singleFormat, startTime: time }]
+        : text.split("\n").filter(line => line.trim()).map(line => {
+            const [date, venue, region = "", slot = "夜", format = "OTHER", startTime = ""] =
+              line.split("|").map(x => x.trim());
+            return { date, venue, region, slot, format: format as Show["format"], startTime };
+          });
+      const resolvedType = selected?.type ?? type;
+      const groupNeeded = resolvedType !== "SPECIAL" || rows.length > 1;
+      const resolvedId = selected?.id || (groupNeeded && tourName.trim() ? crypto.randomUUID() : null);
       if (!selected && !tourName.trim()) throw new Error("ライブ名を入力してください");
       if (groupNeeded && !resolvedId) throw new Error("ライブ名を入力してください");
-      const shows: Show[] = text
-        .split("\n")
-        .filter((l) => l.trim())
-        .map((line) => {
-          const [
-            date,
-            venue,
-            region = "",
-            slot = "夜",
-            format = "OTHER",
-            startTime = "",
-          ] = line.split("|").map((x) => x.trim());
+      const shows: Show[] = rows.map(({ date, venue, region, slot, format, startTime }) => {
           const starts = startTime || time || selected?.defaultTime;
           return {
             id: crypto.randomUUID(),
@@ -210,12 +220,13 @@ export function LibraryEditor({
         </button>
       </div>
       <label>
-        ツアー
+        追加先
         <select
           value={tourId}
           disabled={!!preview}
           onChange={(e) => {
             setTourId(e.target.value);
+            setType(working.tours.find(t => t.id === e.target.value)?.type ?? "SPECIAL");
             setTemplateId("");
             setEntries([]);
             setNewTemplateId("");
@@ -256,27 +267,48 @@ export function LibraryEditor({
             </select>
           </label>
           {tourId && working.templates.some(t=>t.tourId===tourId) && <label>基本セトリ<select value={newTemplateId} onChange={e=>setNewTemplateId(e.target.value)}><option value="">自動選択（1種類の場合）</option>{working.templates.filter(t=>t.tourId===tourId).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
-          <label>
-            開演時間（任意）
-            <input
-              type="time"
-              disabled={!!preview}
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-            />
-          </label>
-          <label>
-            公演日程
-            <textarea
-              disabled={!!preview}
-              placeholder={
-                "2024-03-02 | 東京ドーム | 東京 | 夜 | DOME | 17:00\n2024-03-03 | 東京ドーム | 東京 | 夜 | DOME | 17:00"
-              }
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-          </label>
-          <p>日付 | 会場 | 都道府県 | 公演回 | ライブ形式 | 開演時間（任意）</p>
+          {!tourId && type === "SPECIAL" && (
+            <button type="button" className="subtle-button" disabled={!!preview}
+              onClick={() => setMultiDay(v => !v)}>
+              {multiDay ? "1公演ずつ登録する" : "複数日をまとめて登録する"}
+            </button>
+          )}
+          {!tourId && type === "SPECIAL" && !multiDay ? (
+            <>
+              <label>公演日<input type="date" required disabled={!!preview}
+                value={singleDate} onChange={e => setSingleDate(e.target.value)} /></label>
+              <label>会場<input required maxLength={200} placeholder="例：東京ドーム"
+                disabled={!!preview} value={singleVenue} onChange={e => setSingleVenue(e.target.value)} /></label>
+              <label>都道府県<select value={singleRegion} disabled={!!preview}
+                onChange={e => setSingleRegion(e.target.value)}>
+                <option value="">未設定</option>
+                {PREFECTURES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select></label>
+              <label>会場形式<select value={singleFormat} disabled={!!preview}
+                onChange={e => setSingleFormat(e.target.value as Show["format"])}>
+                <option value="OTHER">その他</option>
+                <option value="ARENA">アリーナ</option>
+                <option value="DOME">ドーム</option>
+                <option value="STADIUM">スタジアム</option>
+              </select></label>
+              <label>開演時間（任意）<input type="time" disabled={!!preview}
+                value={time} onChange={e => setTime(e.target.value)} /></label>
+              <details><summary>公演回を指定（同日昼夜などの場合）</summary>
+                <label>公演回<input maxLength={30} placeholder="例：昼・夜・第1部"
+                  value={singleSlot} disabled={!!preview}
+                  onChange={e => setSingleSlot(e.target.value)} /></label>
+              </details>
+            </>
+          ) : (
+            <>
+              <label>開演時間（任意）<input type="time" disabled={!!preview}
+                value={time} onChange={e => setTime(e.target.value)} /></label>
+              <label>公演日程<textarea disabled={!!preview}
+                placeholder={"2024-03-02 | 東京ドーム | 東京 | 夜 | DOME | 17:00\n2024-03-03 | 東京ドーム | 東京 | 夜 | DOME | 17:00"}
+                value={text} onChange={e => setText(e.target.value)} /></label>
+              <p>日付 | 会場 | 都道府県 | 公演回 | ライブ形式 | 開演時間（任意）</p>
+            </>
+          )}
           {!preview ? (
             <button disabled={disabled} onClick={prepareShows}>
               登録内容を確認
@@ -299,6 +331,9 @@ export function LibraryEditor({
                   ))}
                 </>
               )}
+              <button type="button" disabled={disabled} onClick={() => {
+                setDraft(structuredClone(data)); setPreview(null); setError("");
+              }}>入力を修正する</button>
               <button
                 className="primary"
                 disabled={disabled || !preview.shows.length}
