@@ -75,27 +75,37 @@ function liveConfig_() {
   if (!/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/.test(project) || !/^[\w-]+$/.test(spreadsheet)) throw new Error('接続先の設定が不正です');
   return {project:project,spreadsheet:spreadsheet,database:'projects/'+project+'/databases/(default)'};
 }
-function liveRequest_(method,path,body,allowMissing) {
+function liveGoogleRequest_(method,url,body,allowMissing,service) {
   var response;
   try {
     var options = {method:method,headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},contentType:'application/json',muteHttpExceptions:true};
     if (body) options.payload = JSON.stringify(body);
-    response = UrlFetchApp.fetch('https://firestore.googleapis.com/v1/'+path,options);
+    response = UrlFetchApp.fetch(url,options);
   } catch (ignored) { var uncertain = new Error('通信結果を確認できません。再実行前に同期状態を確認してください'); uncertain.code='NETWORK_UNCERTAIN'; throw uncertain; }
   var code = response.getResponseCode(), json;
   try { json = JSON.parse(response.getContentText()); } catch (ignored) { json = {}; }
   if (code === 404 && allowMissing) return null;
   if (code < 200 || code >= 300) {
     var status = json.error && json.error.status || 'HTTP_'+code;
-    var error = new Error('Firestore '+code+' ('+status+')。OAuthスコープ・API有効化・本人のIAM権限を確認してください');
+    var detail = (json.error && json.error.details || []).filter(function (d) { return d.reason; })[0];
+    var reason = detail ? ' / '+detail.reason : '';
+    var consumer = detail && detail.metadata && detail.metadata.consumer ? ' / '+detail.metadata.consumer : '';
+    var error = new Error(service+' '+code+' ('+status+reason+consumer+')。OAuthスコープ・API有効化・実行アカウントのアクセス権を確認してください');
     error.code = status; throw error;
   }
   return json;
 }
+function liveRequest_(method,path,body,allowMissing) {
+  return liveGoogleRequest_(method,'https://firestore.googleapis.com/v1/'+path,body,allowMissing,'Firestore');
+}
 function liveRows_(cfg) {
-  var sheet = SpreadsheetApp.openById(cfg.spreadsheet).getSheetByName('06_Songs');
-  if (!sheet) throw new Error('06_Songsが見つかりません');
-  return sheet.getRange(1,1,Math.max(sheet.getLastRow(),1),7).getDisplayValues();
+  // SpreadsheetApp.openById requires the broader spreadsheets scope.
+  // Sheets values.get supports spreadsheets.readonly, so the source stays read-only.
+  var url = 'https://sheets.googleapis.com/v4/spreadsheets/'+cfg.spreadsheet+'/values/'+encodeURIComponent("'06_Songs'!A1:G10000")+'?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS';
+  var response = liveGoogleRequest_('get',url,null,false,'Sheets API');
+  var rows = response.values || [];
+  if (rows.length >= 10000) throw new Error('06_Songsの取得上限に達しました。切り詰めたデータは同期しません');
+  return rows;
 }
 function liveStatus_(cfg) { return liveRequest_('get',cfg.database+'/documents/syncStatus/current',null,true); }
 function liveCatalog_(cfg) {

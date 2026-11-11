@@ -4,13 +4,15 @@ LIVE ARCHIVE専用。現在のmainはGoogleログイン・Firestore接続・GAS�
 
 ## 次の段階：GASの接続確認
 
+2026-11-11修正：実GASでSpreadsheetApp.openByIdの権限エラーを確認し、Sheets API values.getへ変更。manifestはspreadsheets.readonlyのままで、ソースの書込権限は追加しません。旧コードを貼付済みの場合は、テストページを再読み込みしてGASコードをコピーし、Code.gsだけを置き換えて再実行します。API未有効などの403はサービス名・理由・対象consumer projectを表示するため、秘密情報を送らずエラーを共有できます。
+
 本人によるFirestore保存・再読込・未ログイン拒否の確認が完了。次は公開ページの「④ Universeの楽曲同期」から、**新しい独立したApps Script**へコードとmanifestをコピーし、`checkLiveConnection`を実行します。手順は `docs/GAS_SETUP.html`。
 
 `checkLiveConnection`はUniverseを読み、Firestoreへ技術的な接続確認1件だけを書きます。初回の実Google OAuth/IAM検証はユーザーのGAS環境で必要です。成功した後に `previewUniverseSync`（読取のみ）→`syncUniverseSongs`（差分を原子的に保存）の順で進めます。手動同期後に本人が選んだ場合のみ、15分間隔の定時トリガーを作成します。編集トリガーは読取専用権限での動作確認待ちです。
 
 楽曲が同期できても公演・参戦の初期一括登録は行いません。同期用データはUniverseの正本のキャッシュだけで、LIVE限定曲・参戦・保存済み予想には触れません。ルールは本人だけに楽曲/同期状態の読取を許可し、クライアントからの曲書込を禁止。GASはGoogle OAuthとIAMで更新します。起動時にSheetsへ直接取得する構成ではないため、最終同期時刻を表示します。
 
-検証：ソース欠損/重複、改名、削除曲の参照保持、過大バッチの中止、RESTによる原子的なcommit、失敗時の保持、応答消失後の成功確認、本人限定/楽曲読取専用の14テスト。すべてローカルエミュレーターで通過。Googleの実権限、GAS実行、実際の曲同期、定時トリガーはまだ未検証です。
+検証：ソース欠損/重複、改名、削除曲の参照保持、過大バッチの中止、RESTによる原子的なcommit、失敗時の保持、応答消失後の成功確認、本人限定/楽曲読取専用の15テスト。すべてローカルエミュレーターで通過。Googleの実権限、GAS実行、実際の曲同期、定時トリガーはまだ未検証です。
 
 ## 次の本人操作
 

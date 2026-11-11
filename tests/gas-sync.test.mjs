@@ -45,9 +45,14 @@ function emulatorRuntime(){
   let rows=[header,row], failCommit=false, loseReply=false;
   const calls=[];
   const context=vm.createContext({console:{log(){}},PropertiesService:{getScriptProperties:()=>({getProperty:key=>key==='FIREBASE_PROJECT_ID'?'demo-live-connection':null})},
-    SpreadsheetApp:{openById:()=>({getSheetByName:name=>{assert.equal(name,'06_Songs');return {getLastRow:()=>rows.length,getRange:(r,c,count,cols)=>{assert.deepEqual([r,c,cols],[1,1,7]);return {getDisplayValues:()=>rows};}};}})},
+    SpreadsheetApp:{openById:()=>{throw new Error('SpreadsheetApp would require broader source permissions');}},
     ScriptApp:{getOAuthToken:()=> 'owner'},Utilities:{getUuid:randomUUID},LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
     UrlFetchApp:{fetch:(url,options)=>{
+      if(url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/')) {
+        assert.equal(options.method,'get');assert.equal(options.payload,undefined);
+        assert.ok(decodeURIComponent(url).includes("'06_Songs'!A1:G10000"));
+        return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({values:rows})};
+      }
       assert.ok(url.startsWith('https://firestore.googleapis.com/v1/projects/demo-live-connection/'));
       calls.push({url,method:options.method,body:options.payload?JSON.parse(options.payload):null});
       if(failCommit&&options.method==='post'){failCommit=false;return {getResponseCode:()=>500,getContentText:()=>JSON.stringify({error:{status:'INTERNAL'}})};}
@@ -78,4 +83,17 @@ test('actual REST sync: atomic catalog, no-op diff, source failure preservation 
   assert.equal(c.LiveSongSyncCore.decode(c.liveStatus_(c.liveConfig_()).fields).state,'OK');
   // Two writes: exactly one song plus its status; no independent halfway state.
   assert.ok(rt.calls.some(x=>x.body?.writes?.length===2));
+});
+test('source scope stays read-only and API errors include the enabling project without credentials',()=>{
+  const manifest=JSON.parse(readFileSync('gas/appsscript.json','utf8'));
+  assert.ok(manifest.oauthScopes.includes('https://www.googleapis.com/auth/spreadsheets.readonly'));
+  assert.ok(!manifest.oauthScopes.includes('https://www.googleapis.com/auth/spreadsheets'));
+  const context=vm.createContext({ScriptApp:{getOAuthToken:()=> 'secret-test-token'},UrlFetchApp:{fetch:(url,options)=>{
+    assert.equal(options.method,'get');assert.equal(options.headers.Authorization,'Bearer secret-test-token');
+    return {getResponseCode:()=>403,getContentText:()=>JSON.stringify({error:{status:'PERMISSION_DENIED',details:[{reason:'SERVICE_DISABLED',metadata:{consumer:'projects/123456'}}]}})};
+  }}});
+  new vm.Script(source).runInContext(context);
+  assert.throws(()=>context.liveRows_({spreadsheet:'test-sheet'}),error=>{
+    assert.match(error.message,/Sheets API 403/);assert.match(error.message,/SERVICE_DISABLED/);assert.match(error.message,/projects\/123456/);assert.ok(!error.message.includes('secret-test-token'));return true;
+  });
 });
