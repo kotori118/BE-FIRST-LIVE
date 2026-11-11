@@ -70,7 +70,10 @@ async function requestStartupSync(){
 if(document.getElementById('saveSyncEndpoint'))document.getElementById('saveSyncEndpoint').onclick=()=>{
   const value=document.getElementById('syncEndpoint').value.trim();
   if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(value)){status('GASのWebアプリURL（末尾/exec）を入力してください。');return;}
-  localStorage.setItem('liveArchiveSyncEndpoint',value);updateFirestoreUser(auth?.currentUser);
+  localStorage.setItem('liveArchiveSyncEndpoint',value);
+  document.getElementById('saveSyncEndpoint').textContent='URLを保存しました・上の更新状況を確認中';
+  updateFirestoreUser(auth?.currentUser);
+  document.getElementById('startupState')?.scrollIntoView({behavior:'smooth',block:'center'});
 };
 function errorText(error) {
   if (error.code === "permission-denied")
