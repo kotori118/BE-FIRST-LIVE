@@ -11,6 +11,8 @@ var LiveSongSyncCore = (function () {
     rows.slice(1).forEach(function (row) {
       if (row.every(function (v) { return !text(v); })) return;
       function get(key) { return text(row[header.indexOf(key)]); }
+      // Only this exact Artist is part of the LIVE catalog, including internal units.
+      if (get('Artist') !== 'BE:FIRST') return;
       var id = get('SongID'), title = get('Title'), date = get('ReleaseDate').replace(/\//g,'-'), flag = get('IsTitleTrack').toUpperCase();
       if (!/^[A-Za-z0-9_-]{1,120}$/.test(id) || !title || Object.prototype.hasOwnProperty.call(seen,id)) fail('SongIDが不正または重複しています: ' + id);
       if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0,10) !== date)) fail('発売日が不正です: ' + id);
@@ -18,12 +20,13 @@ var LiveSongSyncCore = (function () {
       seen[id] = true;
       songs.push({songRef:'U:'+id,universeSongId:id,title:title,artist:get('Artist')||null,releaseDate:date||null,form:get('Form')||null,cdTitle:get('CDTitle')||null,isTitleTrack:flag==='TRUE',available:true});
     });
-    if (!songs.length) fail('楽曲が0件です。前回の正常データを保持します');
+    if (!songs.length) fail('BE:FIRST名義の楽曲が0件です。前回の正常データを保持します');
     return songs;
   }
   function plan(songs, existing) {
-    var incoming = Object.create(null), changes = [], adds = 0, updates = 0, missing = 0;
+    var incoming = Object.create(null), changes = [], deletions = [], adds = 0, updates = 0, missing = 0;
     songs.forEach(function (song) {
+      if (song.artist !== 'BE:FIRST') fail('同期対象外の名義が含まれています');
       var id = song.universeSongId, old = existing[id]; incoming[id] = true;
       if (!old || FIELDS.some(function (key) { return old.data[key] !== song[key]; })) {
         changes.push({id:id,data:song,updateTime:old ? old.updateTime : null});
@@ -32,13 +35,19 @@ var LiveSongSyncCore = (function () {
     });
     Object.keys(existing).forEach(function (id) {
       var old = existing[id];
+      if (!incoming[id] && old.data.artist !== 'BE:FIRST') {
+        // Only canonical U: cache records can be removed; never local songs or live data.
+        if (old.data.universeSongId !== id || old.data.songRef !== 'U:'+id || !old.updateTime) fail('対象外キャッシュの構造を確認できません: '+id);
+        deletions.push({id:id,updateTime:old.updateTime});
+        return;
+      }
       if (!incoming[id] && old.data.available !== false) {
         var data = {}; FIELDS.forEach(function (key) { data[key] = old.data[key]; }); data.available = false;
         changes.push({id:id,data:data,updateTime:old.updateTime}); missing++;
       }
     });
-    if (changes.length > 399) { var e = new Error('変更が399曲を超えています。今回の書込は行いません'); e.code = 'BATCH_TOO_LARGE'; throw e; }
-    return {changes:changes,added:adds,updated:updates,unavailable:missing,sourceCount:songs.length,befirstCount:songs.filter(function (s) { return s.artist==='BE:FIRST'; }).length};
+    if (changes.length + deletions.length > 399) { var e = new Error('変更が399曲を超えています。今回の書込は行いません'); e.code = 'BATCH_TOO_LARGE'; throw e; }
+    return {changes:changes,deletions:deletions,added:adds,updated:updates,unavailable:missing,removed:deletions.length,sourceCount:songs.length,befirstCount:songs.length};
   }
   function encode(data) {
     var fields = {};
@@ -125,7 +134,7 @@ function liveCatalog_(cfg) {
 function liveWrite_(cfg,path,fields,previous) {
   return {update:{name:cfg.database+'/documents/'+path,fields:fields},currentDocument:previous ? {updateTime:previous} : {exists:false}};
 }
-function liveSummary_(plan) { return {sourceCount:plan.sourceCount,befirstCount:plan.befirstCount,added:plan.added,updated:plan.updated,unavailable:plan.unavailable}; }
+function liveSummary_(plan) { return {sourceCount:plan.sourceCount,befirstCount:plan.befirstCount,added:plan.added,updated:plan.updated,unavailable:plan.unavailable,removed:plan.removed}; }
 
 /** First user-run step: reads Universe, confirms Firestore IAM and writes ONE diagnostic doc. */
 function checkLiveConnection() {
@@ -154,10 +163,12 @@ function syncUniverseSongs() {
     var plan = LiveSongSyncCore.plan(LiveSongSyncCore.normalize(liveRows_(cfg)),liveCatalog_(cfg));
     var old = previous ? LiveSongSyncCore.decode(previous.fields) : {};
     var now = new Date().toISOString();
-    var status = LiveSongSyncCore.encode({state:'OK',errorCode:null,attemptId:attempt,sourceCount:plan.sourceCount,befirstCount:plan.befirstCount,changedCount:plan.changes.length,catalogVersion:(old.catalogVersion||0)+(plan.changes.length?1:0)});
+    var changedCount = plan.changes.length + plan.deletions.length;
+    var status = LiveSongSyncCore.encode({state:'OK',errorCode:null,attemptId:attempt,sourceCount:plan.sourceCount,befirstCount:plan.befirstCount,changedCount:changedCount,removedCount:plan.removed,catalogVersion:(old.catalogVersion||0)+(changedCount?1:0)});
     status.lastSuccessAt = {timestampValue:now};
-    status.lastChangedAt = plan.changes.length ? {timestampValue:now} : previous && previous.fields.lastChangedAt || {nullValue:null};
+    status.lastChangedAt = changedCount ? {timestampValue:now} : previous && previous.fields.lastChangedAt || {nullValue:null};
     var writes = plan.changes.map(function (change) { return liveWrite_(cfg,'universeSongs/'+change.id,LiveSongSyncCore.encode(change.data),change.updateTime); });
+    plan.deletions.forEach(function (entry) { writes.push({delete:cfg.database+'/documents/universeSongs/'+entry.id,currentDocument:{updateTime:entry.updateTime}}); });
     writes.push(liveWrite_(cfg,'syncStatus/current',status,previous && previous.updateTime));
     // Firestore commit is atomic: every changed song AND the successful status switch together.
     liveRequest_('post',cfg.database+'/documents:commit',{writes:writes}); committed = true;

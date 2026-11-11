@@ -126,10 +126,12 @@ if ($("readCatalog")) $("readCatalog").onclick = () => run(async () => {
   if (!after.exists() || before.data().attemptId !== after.data().attemptId)
     return "楽曲を同期中です。もう一度「同期済みの楽曲を確認」を押してください。";
   if (songs.size > 1000) throw new Error("確認画面の取得上限を超えました。");
-  const active = songs.docs.map(d => d.data()).filter(s => s.available !== false);
+  const active = songs.docs.map(d => d.data()).filter(s => s.available !== false && s.artist === "BE:FIRST");
+  const excluded = songs.docs.filter(d => d.data().artist !== "BE:FIRST").length;
   const info = after.data();
   const last = info.lastSuccessAt?.toDate?.().toLocaleString("ja-JP") ?? "まだありません";
   return `同期済み：${active.length}曲（BE:FIRST ${active.filter(s => s.artist === "BE:FIRST").length}曲）\n最終成功：${last}\n` +
+    (excluded ? `対象外キャッシュが${excluded}曲残っています。更新したGASのプレビューで除外件数を確認してください。\n` : "") +
     (info.state === "ERROR" ? "最新の同期は失敗。前回の正常データを保持しています。" : "GASが最後に取得したデータです。起動時にSheetsへ直接同期する方式ではありません。");
 });
 window.addEventListener("online", controls);

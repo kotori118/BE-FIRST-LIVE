@@ -10,9 +10,9 @@ const header=['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleT
 const row=['1001','Example','BE:FIRST','2026/11/03','アルバム','','FALSE'];
 const plain=value=>JSON.parse(JSON.stringify(value));
 function core(){const c=vm.createContext({});new vm.Script(source).runInContext(c);return c.LiveSongSyncCore;}
-test('source normalization: stable IDs, slash dates, boolean false, blank artist',()=>{
+test('source normalization: stable IDs, slash dates, boolean false; only BE:FIRST Artist',()=>{
   const c=core(),songs=c.normalize([header,row,['5001','Example','','','','','FALSE']]);
-  assert.equal(songs.length,2);assert.equal(songs[0].releaseDate,'2026-11-03');assert.equal(songs[0].isTitleTrack,false);assert.equal(songs[1].artist,null);
+  assert.equal(songs.length,1);assert.equal(songs[0].releaseDate,'2026-11-03');assert.equal(songs[0].isTitleTrack,false);
   assert.equal(songs[0].songRef,'U:1001');
 });
 test('invalid source, duplicate ID and empty reads cannot form a sync',()=>{
@@ -28,9 +28,27 @@ test('diffs update changed IDs, preserve missing references and avoid unchanged 
   assert.equal(plan.changes[0].updateTime,'version-a');assert.equal(old['1001'].data.title,'Example');
 });
 test('oversized batches fail before writing; literal property-like IDs stay independent',()=>{
-  const c=core();const rows=[header,...Array.from({length:400},(_,i)=>[String(i),'Song','','','','',''])];
+  const c=core();const rows=[header,...Array.from({length:400},(_,i)=>[String(i),'Song','BE:FIRST','','','',''])];
   assert.throws(()=>c.plan(c.normalize(rows),{}));
-  assert.equal(c.normalize([header,['__proto__','Song','','','','',''],['constructor','Song','','','','','']]).length,2);
+  assert.equal(c.normalize([header,['__proto__','Song','BE:FIRST','','','',''],['constructor','Song','BE:FIRST','','','','']]).length,2);
+});
+test('excludes all other groups, UNIT and blank Artist; includes BE:FIRST internal units',()=>{
+  const c=core(),songs=c.normalize([header,row,['1002','Internal unit','BE:FIRST','','','','FALSE'],['5001','Other unit','UNIT','','','','FALSE'],['2001','Other group','OTHER','','','','FALSE'],['5002','No Artist','','','','','FALSE']]);
+  assert.deepEqual(plain(songs).map(s=>s.universeSongId),['1001','1002']);
+  assert.throws(()=>c.normalize([header,['5001','Other unit','UNIT','','','','FALSE']]));
+  assert.throws(()=>c.plan([{...plain(songs[0]),artist:'UNIT'}],{}));
+});
+test('plans removal only of excluded canonical Universe cache; missing BE:FIRST refs stay',()=>{
+  const c=core(),songs=c.normalize([header,row]),first=plain(songs[0]);
+  const old={'1001':{data:first,updateTime:'a'},'1002':{data:{...first,universeSongId:'1002',songRef:'U:1002'},updateTime:'b'},'5001':{data:{...first,universeSongId:'5001',songRef:'U:5001',artist:'UNIT'},updateTime:'c'}};
+  const plan=c.plan(songs,old);assert.equal(plan.sourceCount,1);assert.equal(plan.removed,1);assert.equal(plan.unavailable,1);assert.equal(plan.deletions[0].id,'5001');
+  assert.throws(()=>c.plan(songs,{'local':{data:{...first,artist:'UNIT',songRef:'L:local'},updateTime:'x'}}));
+  const target=c.normalize([header,...Array.from({length:66},(_,i)=>[String(1000+i),'Song '+i,'BE:FIRST','','','','FALSE'])]);
+  const all={};target.forEach(s=>all[s.universeSongId]={data:plain(s),updateTime:'v'});
+  for(let i=0;i<91;i++){const id=String(5000+i);all[id]={data:{...first,universeSongId:id,songRef:'U:'+id,artist:'UNIT'},updateTime:'v'};}
+  const migration=c.plan(target,all);
+  assert.deepEqual(plain({sourceCount:migration.sourceCount,befirstCount:migration.befirstCount,added:migration.added,updated:migration.updated,unavailable:migration.unavailable,removed:migration.removed}),{sourceCount:66,befirstCount:66,added:0,updated:0,unavailable:0,removed:91});
+  assert.equal(Object.keys(all).length,157);
 });
 test('Firestore field codec preserves null/boolean and rejects unsupported structures',()=>{
   const c=core(),data={title:'Example',artist:null,available:false,count:3};assert.deepEqual(plain(c.decode(c.encode(data))),data);
@@ -83,6 +101,13 @@ test('actual REST sync: atomic catalog, no-op diff, source failure preservation 
   assert.equal(c.LiveSongSyncCore.decode(c.liveStatus_(c.liveConfig_()).fields).state,'OK');
   // Two writes: exactly one song plus its status; no independent halfway state.
   assert.ok(rt.calls.some(x=>x.body?.writes?.length===2));
+  // Simulate the previous all-artist import, then remove only its foreign U: cache.
+  const cfg=c.liveConfig_(),foreign={songRef:'U:5001',universeSongId:'5001',title:'Excluded',artist:'UNIT',releaseDate:null,form:null,cdTitle:null,isTitleTrack:false,available:true};
+  c.liveRequest_('post',cfg.database+'/documents:commit',{writes:[c.liveWrite_(cfg,'universeSongs/5001',c.LiveSongSyncCore.encode(foreign),null)]});
+  const beforeCleanup=c.previewUniverseSync();assert.equal(beforeCleanup.removed,1);assert.equal(beforeCleanup.sourceCount,1);
+  assert.equal(c.syncUniverseSongs().removed,1);assert.equal(c.liveCatalog_(cfg)['5001'],undefined);assert.equal(c.liveCatalog_(cfg)['1001'].data.title,'Renamed');
+  assert.ok(rt.calls.some(x=>x.body?.writes?.some(w=>w.delete?.endsWith('/universeSongs/5001'))));
+  assert.equal(c.previewUniverseSync().removed,0);
 });
 test('source scope stays read-only and API errors include the enabling project without credentials',()=>{
   const manifest=JSON.parse(readFileSync('gas/appsscript.json','utf8'));
