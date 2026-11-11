@@ -406,32 +406,63 @@ nav .active {
   padding: 3px 5px;
 }
 
-/* 公演詳細の閲覧専用: セトリを一目で追える省スペース表示にする。
-   編集画面や他のカードには適用しない。 */
+/* 閲覧用セトリは曲順と曲名が主役。通常の本編/FULLは表示しない。 */
+.setlist-compact {
+  padding: 18px 19px;
+}
+.setlist-compact h2 {
+  margin: 0 0 7px;
+}
+.setlist-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 15px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.setlist-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
 .setlist-compact .track {
   padding: 9px 0;
   gap: 10px;
+  min-height: 42px;
 }
-.setlist-compact .track > div {
-  min-width: 0;
+.setlist-compact .track .order {
+  font-size: 13px;
+  min-width: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.setlist-compact .track-content {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 5px 11px;
+  gap: 2px 8px;
+  min-width: 0;
 }
 .setlist-compact .track strong {
   font-size: 15px;
-  line-height: 1.4;
+  line-height: 1.45;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-.setlist-compact .badges {
-  margin-top: 0;
-  gap: 4px;
+.setlist-compact .track-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
 }
-.setlist-compact .badges span {
-  font-size: 10px;
-  padding: 2px 5px;
+.setlist-compact .track-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b8589;
+}
+.setlist-compact .track-flag-debut {
+  color: #008ba0;
 }
 .segmented {
   background: #eaf2f3;
