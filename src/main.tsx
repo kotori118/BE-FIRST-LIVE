@@ -45,6 +45,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
+import { attendanceStats, songArchive } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -53,13 +54,13 @@ const fixture: State = {
   songs: trialSongs,
   syncedAt: null,
 };
-type Tab = "HOME" | "LIVE" | "MY LIVE" | "ANALYSIS" | "SETTINGS";
+type Tab = "HOME" | "LIVE" | "ANALYSIS" | "SETTINGS";
 const tabs = [
   ["HOME", House],
   ["LIVE", Disc3],
-  ["MY LIVE", Ticket],
   ["ANALYSIS", ChartNoAxesCombined],
 ] as const;
+const formatLabel = (f: string) => ({ARENA:"アリーナ",DOME:"ドーム",STADIUM:"スタジアム",FANMEETING:"ファンミーティング",OTHER:"その他"} as Record<string,string>)[f] ?? f;
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const copy = <T,>(v: T) => structuredClone(v);
 function App() {
@@ -76,8 +77,11 @@ function App() {
     [year, setYear] = useState(""),
     [format, setFormat] = useState(""),
     [tourFilter, setTourFilter] = useState(""),
-    [artist, setArtist] = useState(""),
     [category, setCategory] = useState(""),
+    [liveMode, setLiveMode] = useState<"mine" | "all">("mine"),
+    [liveStatsOpen, setLiveStatsOpen] = useState(false),
+    [songDetail, setSongDetail] = useState<string | null>(null),
+    [attendanceEdit, setAttendanceEdit] = useState<{showId:string;attended:boolean;seat:string;note:string} | null>(null),
     [expanded, setExpanded] = useState<string | null>(
       sessionStorage.getItem("lastTour"),
     ),
@@ -166,7 +170,7 @@ function App() {
     });
   }, []);
   useEffect(() => () => stop.current(), []);
-  const dirty = !!edit || libraryDirty;
+  const dirty = !!edit || libraryDirty || !!attendanceEdit;
   useEffect(() => {
     const guard = (e: BeforeUnloadEvent) => {
       if (dirty) {
@@ -183,8 +187,10 @@ function App() {
         return;
       }
       setEdit(null);
+      setAttendanceEdit(null);
       setLibraryDirty(false);
       setShowId(null);
+      setSongDetail(null);
       setTab("HOME");
     };
     window.addEventListener("popstate", back);
@@ -209,8 +215,10 @@ function App() {
     if (dirty && !confirm("保存していない変更があります。破棄しますか？"))
       return;
     setEdit(null);
+    setAttendanceEdit(null);
     setLibraryDirty(false);
     setShowId(null);
+    setSongDetail(null);
     setTab(next);
   };
   const refresh = async () => {
@@ -272,22 +280,23 @@ function App() {
     });
     await refresh();
   };
-  const attend = (show: Show) =>
-    void run(async () => {
-      if (!state) return;
-      const current = state.data.attendance.find((x) => x.showId === show.id);
-      const now = new Date().toISOString();
-      await save("attendance", {
-        id: show.id,
-        revision: current?.revision ?? 0,
-        showId: show.id,
-        attended: !current?.attended,
-        seat: current?.seat ?? "",
-        note: current?.note ?? "",
-        createdAt: current?.createdAt ?? now,
-        updatedAt: now,
-      } as Dataset["attendance"][number]);
-    });
+  const startAttendance = (show: Show) => {
+    const a = stateRef.current?.data.attendance.find((x) => x.showId === show.id);
+    setAttendanceEdit({ showId: show.id, attended: a?.attended ?? false, seat: a?.seat ?? "", note: a?.note ?? "" });
+  };
+  const saveAttendance = () => void run(async () => {
+    if (!state || !attendanceEdit) return;
+    const current = state.data.attendance.find((x) => x.showId === attendanceEdit.showId);
+    if (current?.attended && !attendanceEdit.attended && !confirm("参戦記録を解除しますか？")) return;
+    const now = new Date().toISOString();
+    await save("attendance", {
+      id: attendanceEdit.showId, revision: current?.revision ?? 0,
+      showId: attendanceEdit.showId, attended: attendanceEdit.attended,
+      seat: attendanceEdit.seat, note: attendanceEdit.note,
+      createdAt: current?.createdAt ?? now, updatedAt: now,
+    } as Dataset["attendance"][number]);
+    setAttendanceEdit(null);
+  });
   const download = (name: string, text: string, type = "application/json") => {
     const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement("a");
@@ -301,6 +310,7 @@ function App() {
     baseline.current = copy(state);
     setDraftConflicted(false);
     const a = state.data.attendance.find((x) => x.showId === show.id);
+    setAttendanceEdit(null);
     setEdit({
       show: copy(show),
       entries: copy(effectiveEntries(state.data, show) ?? []),
@@ -401,11 +411,11 @@ function App() {
     return (
       <div className="login">
         <div className="wordmark">
-          BE:FIRST<span>LIVE ARCHIVE</span>
+          <img src="/be-live-logo.svg" alt="BE:LIVE" className="brand-logo" />
         </div>
         <div className="glass login-card">
           <Disc3 size={44} />
-          <h1>LIVE ARCHIVE</h1>
+          <h1>BE:LIVE</h1>
           {configured ? (
             <button
               className="primary"
@@ -438,6 +448,7 @@ function App() {
       data.attendance.some((a) => a.showId === s.id && a.attended),
     ),
     myStats = analyze(data, mine),
+    liveStats = attendanceStats(data, mine),
     heard = new Set(myStats.map((s) => s.songRef)),
     missing = unheard(state.songs, heard),
     latest = [...mine].sort((a, b) => b.date.localeCompare(a.date))[0],
@@ -451,8 +462,6 @@ function App() {
     ),
     stats = analyze(data, shownShows).filter(
       (s) =>
-        (!artist ||
-          allSongs.find((x) => x.ref === s.songRef)?.artist === artist) &&
         (!category ||
           (category === "UNRELEASED"
             ? data.songMetadata.find((m) => m.songRef === s.songRef)?.unreleased
@@ -473,32 +482,14 @@ function App() {
     history.pushState(null, "");
     setShowId(s.id);
   };
-  const CheckIn = ({ s }: { s: Show }) => (
-    <button
-      className={
-        "checkin " + (mine.some((m) => m.id === s.id) ? "selected" : "")
-      }
-      disabled={busy || !online}
-      aria-label={`${s.date} ${s.venue}の参加を切り替える`}
-      aria-pressed={mine.some((m) => m.id === s.id)}
-      onClick={() => attend(s)}
-    >
-      <Check size={17} />
-      {mine.some((m) => m.id === s.id) ? "参加済み" : "参加する"}
-    </button>
-  );
+  const CheckIn = ({ s }: { s: Show }) => mine.some((m) => m.id === s.id) ? <span className="attended-badge"><Check size={13} /> 参戦済み</span> : null;
   const ShowCard = ({ s }: { s: Show }) => (
     <div className="show-row">
       <button className="show-open" onClick={() => openShow(s)}>
-        <span className="eyebrow">
-          {s.date.replaceAll("-", ".")} · {s.region}
-        </span>
+        <span className="eyebrow">{s.date.replaceAll("-", ".")} · {s.region || "地域未登録"}</span>
         <strong>{s.venue}</strong>
-        <small>
-          {s.hasSavedSetlist
-            ? `${effectiveEntries(data, s)?.length}曲`
-            : "セトリ未入力"}
-        </small>
+        <small>{data.tours.find((t) => t.id === s.tourId)?.name ?? s.name}</small>
+        <small>{s.hasSavedSetlist ? `${effectiveEntries(data, s)?.length ?? 0}曲` : "セトリ未登録"}</small>
       </button>
       <CheckIn s={s} />
     </div>
@@ -563,7 +554,7 @@ function App() {
         {edit ? (
           <>
             <div className="page-title">
-              <h1>公演を編集</h1>
+              <h1>ライブを編集</h1>
               <button
                 onClick={() => {
                   if (confirm("保存していない変更を破棄しますか？")) {
@@ -820,13 +811,10 @@ function App() {
           </>
         ) : show ? (
           <>
-            <button onClick={() => setShowId(null)}>
-              <ArrowLeft size={16} />
-              公演一覧に戻る
-            </button>
+            <button className="back-link" onClick={() => { setShowId(null); setAttendanceEdit(null); }}><ArrowLeft size={16} /> ライブ一覧へ</button>
             <section className="glass hero">
               <p className="eyebrow">
-                {show.date.replaceAll("-", ".")} · {show.format}
+                {show.date.replaceAll("-", ".")} · {formatLabel(show.format)}
               </p>
               <h1>{show.venue}</h1>
               <p>
@@ -835,7 +823,8 @@ function App() {
               </p>
               <div className="actions">
                 <CheckIn s={show} />
-                <button
+                <button className="subtle-button" disabled={busy || !online} onClick={() => startAttendance(show)}><Ticket size={16} /> {mine.some((m) => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</button>
+                <button className="subtle-button"
                   disabled={busy || !online}
                   onClick={() => startEdit(show)}
                 >
@@ -847,7 +836,7 @@ function App() {
             <section className="card">
               <h2>セットリスト</h2>
               {!show.hasSavedSetlist ? (
-                <p className="empty">セトリ未入力</p>
+                <p className="empty">セトリ未登録</p>
               ) : (
                 effectiveEntries(data, show)?.map((entry, i) => (
                   <div className="track" key={entry.id}>
@@ -889,8 +878,17 @@ function App() {
                 ))
               )}
             </section>
+            {attendanceEdit?.showId === show.id && (
+              <section className="card fields attendance-editor">
+                <h2>参戦記録を編集</h2>
+                <label className="inline-check"><input type="checkbox" checked={attendanceEdit.attended} onChange={(e) => setAttendanceEdit({...attendanceEdit, attended:e.target.checked})}/> このライブに参戦した</label>
+                <label>座席（任意）<input value={attendanceEdit.seat} onChange={(e) => setAttendanceEdit({...attendanceEdit, seat:e.target.value})}/></label>
+                <label>感想（任意）<textarea value={attendanceEdit.note} onChange={(e) => setAttendanceEdit({...attendanceEdit, note:e.target.value})}/></label>
+                <div className="actions"><button className="primary" disabled={busy || !online} onClick={saveAttendance}>保存</button><button onClick={() => setAttendanceEdit(null)}>キャンセル</button></div>
+              </section>
+            )}
             <section className="card">
-              <h2>参加記録</h2>
+              <h2>参戦記録</h2>
               <p>
                 {data.attendance.find((a) => a.showId === show.id)?.seat ||
                   "座席 —"}
@@ -925,7 +923,7 @@ function App() {
                               .map((e) => title(e.songRef))
                               .join("、") || "追加曲なし"
                           }`
-                        : "セトリ未入力"}
+                        : "セトリ未登録"}
                     </p>
                   );
                 })}
@@ -1004,206 +1002,93 @@ function App() {
             )}
             {tab === "LIVE" && (
               <>
-                <div className="page-title">
-                  <h1>LIVE</h1>
-                  <span>{data.shows.length}公演</span>
+                <div className="page-title"><h1>LIVE</h1><span>{liveMode === "mine" ? mine.length : data.shows.length}公演</span></div>
+                <div className="segmented">
+                  <button className={liveMode === "mine" ? "selected" : ""} onClick={() => {setLiveMode("mine");setLiveStatsOpen(false);}}>MY LIVE</button>
+                  <button className={liveMode === "all" ? "selected" : ""} onClick={() => {setLiveMode("all");setLiveStatsOpen(false);}}>ALL LIVE</button>
                 </div>
-                <input
-                  className="search"
-                  aria-label="公演を検索"
-                  placeholder="ツアー名・日付・会場で検索"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                {[...data.tours]
-                  .sort((a, b) => b.startDate.localeCompare(a.startDate))
-                  .map((t) => {
-                    const list = searchShows.filter((s) => s.tourId === t.id);
-                    return list.length ? (
-                      <section className="card tour" key={t.id}>
-                        <button
-                          className="tour-title"
-                          aria-expanded={expanded === t.id}
-                          onClick={() => {
-                            const next = expanded === t.id ? null : t.id;
-                            setExpanded(next);
-                            if (next) sessionStorage.setItem("lastTour", next);
-                          }}
-                        >
-                          <span>
-                            <span className="eyebrow">
-                              {t.startDate.slice(0, 4)} · {list.length}公演
-                            </span>
-                            <strong>{t.name}</strong>
-                          </span>
-                          <span>{expanded === t.id ? "−" : "＋"}</span>
+                {liveMode === "mine" ? liveStatsOpen ? (
+                  <>
+                    <div className="page-title"><h2>MY LIVE STATS</h2><button className="subtle-button" onClick={() => setLiveStatsOpen(false)}>ライブ履歴へ</button></div>
+                    <div className="metrics">
+                      <div className="glass metric"><span>参戦公演</span><strong>{liveStats.total}<small>公演</small></strong></div>
+                      <div className="glass metric"><span>訪れた都道府県</span><strong>{liveStats.prefectures.length}<small>都道府県</small></strong></div>
+                    </div>
+                    <section className="card"><h2>最初の参戦</h2><p>{liveStats.firstDate ?? "—"}</p></section>
+                    <section className="card"><h2>年別の参戦数</h2>{liveStats.years.map(([y,n]) => {const prev=liveStats.years.find(([py])=>py===String(Number(y)-1));return <div className="stats-row" key={y}><span>{y}年</span><strong>{n}公演 <small>前年比 {prev ? (n-prev[1]>=0?"+":"")+(n-prev[1]) : "—"}</small></strong></div>})}</section>
+                    <section className="card"><h2>月別の参戦数</h2>{liveStats.months.map(([m,n]) => <div className="stats-row" key={m}><span>{m}</span><strong>{n}公演</strong></div>)}</section>
+                    <section className="card"><h2>都道府県別</h2>{liveStats.prefectures.map(([p,n]) => <div className="stats-row" key={p}><span>{p}</span><strong>{n}公演</strong></div>)}{liveStats.unknownPrefectures > 0 && <p className="muted">所在地未判定：{liveStats.unknownPrefectures}公演</p>}</section>
+                    <section className="card"><h2>会場別</h2><p className="muted">訪問会場：{liveStats.venues.length}か所</p>{liveStats.venues.map(([v,n]) => <div className="stats-row" key={v}><span>{v}</span><strong>{n}公演</strong></div>)}</section>
+                    <section className="card"><h2>ツアー別</h2><p className="muted">参戦率は登録済み公演の範囲で算出</p>{liveStats.tourStats.map(t => <div className="stats-row" key={t.id}><span>{t.name}</span><strong>{t.attended}/{t.total}公演 <small>{t.rate === null ? "—" : (t.rate*100).toFixed(0)+"%"}</small></strong></div>)}</section>
+                  </>
+                ) : (
+                  <>
+                    <div className="page-title"><h2>ライブ履歴</h2><button className="subtle-button" onClick={() => setLiveStatsOpen(true)}>MY LIVE STATS →</button></div>
+                    {[...mine].sort((a,b) => b.date.localeCompare(a.date)).map(s => <section className="card live-memory" key={s.id}><ShowCard s={s} /></section>)}
+                    {!mine.length && <div className="card empty">参戦したライブはまだありません<button onClick={() => setLiveMode("all")}>ALL LIVEを見る</button></div>}
+                  </>
+                ) : (
+                  <>
+                    <input className="search" aria-label="公演を検索" placeholder="ツアー名・日付・会場で検索" value={query} onChange={(e) => setQuery(e.target.value)}/>
+                    {[...data.tours].sort((a,b) => b.startDate.localeCompare(a.startDate)).map(t => {
+                      const list = searchShows.filter(s => s.tourId === t.id);
+                      return list.length ? <section className="card tour" key={t.id}>
+                        <button className="tour-title" aria-expanded={expanded === t.id} onClick={() => {const next = expanded === t.id ? null : t.id;setExpanded(next);if(next)sessionStorage.setItem("lastTour",next);}}>
+                          <span><span className="eyebrow">{t.startDate.slice(0,4)} · {list.length}公演</span><strong>{t.name}</strong></span><span>{expanded === t.id ? "−" : "＋"}</span>
                         </button>
-                        {expanded === t.id &&
-                          list
-                            .sort((a, b) => a.date.localeCompare(b.date))
-                            .map((s) => <ShowCard key={s.id} s={s} />)}
-                      </section>
-                    ) : null;
-                  })}
-                {searchShows
-                  .filter((s) => !s.tourId)
-                  .map((s) => (
-                    <section className="card" key={s.id}>
-                      <ShowCard s={s} />
-                    </section>
-                  ))}
-                {!searchShows.length && (
-                  <p className="empty">公演がありません</p>
+                        {expanded === t.id && [...list].sort((a,b)=>a.date.localeCompare(b.date)).map(s => <ShowCard key={s.id} s={s}/>)}
+                      </section> : null;
+                    })}
+                    {searchShows.filter(s => !s.tourId).sort((a,b)=>b.date.localeCompare(a.date)).map(s => <section className="card" key={s.id}><ShowCard s={s}/></section>)}
+                    {!searchShows.length && <p className="empty">公演がありません</p>}
+                  </>
                 )}
-              </>
-            )}
-            {tab === "MY LIVE" && (
-              <>
-                <h1>ライブ履歴</h1>
-                {[...mine]
-                  .sort((a, b) => b.date.localeCompare(a.date))
-                  .map((s) => (
-                    <section className="card" key={s.id}>
-                      <ShowCard s={s} />
-                    </section>
-                  ))}
-                {!mine.length && (
-                  <p className="empty">参加したライブはまだありません</p>
-                )}
-                <section className="card">
-                  <h2>
-                    聴いた曲 <span>{heard.size}</span>
-                  </h2>
-                  {myStats.map((s) => (
-                    <p key={s.songRef}>{title(s.songRef)}</p>
-                  ))}
-                </section>
-                <section className="card">
-                  <h2>
-                    まだ聴いていない曲 <span>{missing.length}</span>
-                  </h2>
-                  {missing.map((s) => (
-                    <p key={s.ref}>{s.title}</p>
-                  ))}
-                </section>
               </>
             )}
             {tab === "ANALYSIS" && (
               <>
-                <h1>楽曲ランキング</h1>
+                <div className="page-title"><h1>{songDetail ? "SONG ARCHIVE" : "ANALYSIS"}</h1>{songDetail && <button className="subtle-button" onClick={() => setSongDetail(null)}>ランキングへ</button>}</div>
                 <div className="segmented">
-                  <button
-                    className={scope === "mine" ? "selected" : ""}
-                    onClick={() => setScope("mine")}
-                  >
-                    自分の参加公演
-                  </button>
-                  <button
-                    className={scope === "all" ? "selected" : ""}
-                    onClick={() => setScope("all")}
-                  >
-                    全公演
-                  </button>
+                  <button className={scope === "mine" ? "selected" : ""} onClick={() => setScope("mine")}>参戦公演</button>
+                  <button className={scope === "all" ? "selected" : ""} onClick={() => setScope("all")}>全公演</button>
                 </div>
                 <section className="card filters">
-                  <select
-                    aria-label="年代"
-                    value={year}
-                    onChange={(e) => setYear(e.target.value)}
-                  >
+                  <select aria-label="年" value={year} onChange={e => setYear(e.target.value)}>
                     <option value="">すべての年</option>
-                    {[
-                      ...new Set(data.shows.map((s) => s.date.slice(0, 4))),
-                    ].map((y) => (
-                      <option key={y}>{y}</option>
-                    ))}
+                    {[...new Set(data.shows.map(s => s.date.slice(0,4)))].sort().reverse().map(y => <option key={y}>{y}</option>)}
                   </select>
-                  <select
-                    aria-label="ツアー"
-                    value={tourFilter}
-                    onChange={(e) => setTourFilter(e.target.value)}
-                  >
+                  <select aria-label="ツアー" value={tourFilter} onChange={e => setTourFilter(e.target.value)}>
                     <option value="">すべてのツアー</option>
-                    {data.tours.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
+                    {data.tours.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
-                  <select
-                    aria-label="公演形式"
-                    value={format}
-                    onChange={(e) => setFormat(e.target.value)}
-                  >
-                    <option value="">すべての形式</option>
-                    {["ARENA", "DOME", "STADIUM", "FANMEETING", "OTHER"].map(
-                      (f) => (
-                        <option key={f}>{f}</option>
-                      ),
-                    )}
+                  <select aria-label="ライブ形式" value={format} onChange={e => setFormat(e.target.value)}>
+                    <option value="">すべてのライブ形式</option>
+                    {["ARENA","DOME","STADIUM","FANMEETING","OTHER"].map(f => <option key={f} value={f}>{formatLabel(f)}</option>)}
                   </select>
-                  <select
-                    aria-label="名義"
-                    value={artist}
-                    onChange={(e) => setArtist(e.target.value)}
-                  >
-                    <option value="">すべての名義</option>
-                    {[
-                      ...new Set(allSongs.map((s) => s.artist).filter(Boolean)),
-                    ].map((a) => (
-                      <option key={a!}>{a}</option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="楽曲区分"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                  >
-                    <option value="">全楽曲</option>
-                    <option value="ORIGINAL">オリジナル</option>
-                    <option value="COVER">カバー</option>
-                    <option value="UNRELEASED">未音源化</option>
+                  <select aria-label="楽曲区分" value={category} onChange={e => setCategory(e.target.value)}>
+                    <option value="">全楽曲</option><option value="ORIGINAL">オリジナル</option><option value="COVER">カバー</option><option value="UNRELEASED">未音源化</option>
                   </select>
                 </section>
-                <section className="card ranking">
-                  {stats.map((s, i) => (
-                    <div className="rank-row" key={s.songRef}>
-                      <span className="order">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <div>
-                        <strong>{title(s.songRef)}</strong>
-                        <small>
-                          披露 {s.performances}回 · FULL {s.full} / SHORT{" "}
-                          {s.short}
-                        </small>
-                      </div>
-                      <strong className="aqua">
-                        {s.shows}
-                        <small>公演</small>
-                      </strong>
-                    </div>
-                  ))}
-                  {!stats.length && (
-                    <p className="empty">集計できるセトリがありません</p>
-                  )}
-                </section>
-                <section className="card">
-                  <h2>レア曲分析</h2>
-                  {[...stats]
-                    .sort((a, b) => (a.rate ?? 0) - (b.rate ?? 0))
-                    .map((s) => (
-                      <div className="rare" key={s.songRef}>
-                        <span>{title(s.songRef)}</span>
-                        <strong>
-                          {s.rate === null
-                            ? "—"
-                            : (s.rate * 100).toFixed(1) + "%"}
-                        </strong>
-                      </div>
-                    ))}
-                  {!stats.length && <p className="empty">—</p>}
-                </section>
+                {songDetail ? (() => {
+                  const detail = songArchive(data, shownShows, songDetail);
+                  return <>
+                    <section className="glass song-hero"><p className="eyebrow">SONG ARCHIVE</p><h2>{title(songDetail)}</h2><div className="song-metrics"><span><strong>{detail.performances}</strong>披露回数</span><span><strong>{detail.shows}</strong>披露公演数</span><span><strong>{detail.rate === null ? "—" : (detail.rate*100).toFixed(1)+"%"}</strong>披露率</span></div><p>最初の記録：{detail.first ?? "—"} ／ 最新：{detail.last ?? "—"}</p></section>
+                    <section className="card"><h2>披露の傾向</h2><div className="stats-row"><span>FULL / SHORT</span><strong>{detail.full} / {detail.short}</strong></div><div className="stats-row"><span>メドレー内</span><strong>{detail.medley}回</strong></div><div className="stats-row"><span>オープニング</span><strong>{detail.opening}回</strong></div><div className="stats-row"><span>アンコール</span><strong>{detail.encore}回</strong></div></section>
+                    <section className="card"><h2>年別の披露回数</h2>{detail.yearly.map(([y,n]) => <div className="stats-row" key={y}><span>{y}年</span><strong>{n}回</strong></div>)}</section>
+                    <section className="card"><h2>ライブ別の披露回数</h2>{detail.tours.map(([t,n]) => <div className="stats-row" key={t}><span>{t}</span><strong>{n}回</strong></div>)}</section>
+                    <section className="card"><h2>披露された公演</h2>{[...detail.history].reverse().map((h,i) => <button className="history-row" key={h.show.id+":"+h.entry.id+":"+i} onClick={() => openShow(h.show)}><span><strong>{h.show.date} · {h.show.venue}</strong><small>{data.tours.find(t => t.id === h.show.tourId)?.name ?? h.show.name}</small></span><span>{h.order}/{h.total}曲目 · {h.entry.version ?? "—"}{h.entry.section === "ENCORE" ? " · アンコール" : ""}</span></button>)}{!detail.history.length && <p className="empty">対象範囲に披露記録がありません</p>}</section>
+                  </>;
+                })() : <>
+                  <section className="card ranking">
+                    <h2>楽曲ランキング</h2>
+                    {stats.map((song,i) => <button className="rank-row rank-button" key={song.songRef} onClick={() => setSongDetail(song.songRef)}>
+                      <span className="order">{String(i+1).padStart(2,"0")}</span><div><strong>{title(song.songRef)}</strong><small>披露 {song.performances}回 · FULL {song.full} / SHORT {song.short}</small></div><strong className="aqua">{song.shows}<small>公演</small></strong>
+                    </button>)}
+                    {!stats.length && <p className="empty">集計できるセトリがありません</p>}
+                  </section>
+                  <section className="card"><h2>レア曲分析</h2>{[...stats].filter(song=>song.rate!==null).sort((a,b)=>(a.rate??0)-(b.rate??0)).map(song=><button className="rare rare-button" key={song.songRef} onClick={()=>setSongDetail(song.songRef)}><span>{title(song.songRef)}</span><strong>{song.rate===null?"—":(song.rate*100).toFixed(1)+"%"}</strong></button>)}{!stats.length&&<p className="empty">—</p>}</section>
+                  <details className="card"><summary>まだ聴いていない曲（{missing.length}曲）</summary><p className="muted">UniverseのBE:FIRST楽曲・登録済みセトリの範囲</p>{missing.map(song => <div className="stats-row" key={song.ref}>{song.title}</div>)}</details>
+                </>}
               </>
             )}
             {tab === "SETTINGS" && (
@@ -1212,6 +1097,7 @@ function App() {
                 <LibraryEditor
                   data={data}
                   songs={allSongs}
+                  onOpenShow={openShow}
                   disabled={busy || !online}
                   onDirty={(dirty) => {
                     if (dirty) libraryBase.current = copy(stateRef.current!);
@@ -1250,12 +1136,11 @@ function App() {
                       void run(async () => {
                         const name = prompt("LIVE限定曲の曲名");
                         if (!name?.trim()) return;
-                        const artist = prompt("名義（任意）");
                         await save("localSongs", {
                           id: crypto.randomUUID(),
                           revision: 0,
                           title: name.trim(),
-                          artist: artist?.trim() || null,
+                          artist: "BE:FIRST",
                         } as Dataset["localSongs"][number]);
                       })
                     }
@@ -1297,7 +1182,7 @@ function App() {
                   <button
                     disabled={busy || !online}
                     onClick={() =>
-                      download("live-archive.json", exportJson(data))
+                      download("be-live.json", exportJson(data))
                     }
                   >
                     <Download size={16} />
