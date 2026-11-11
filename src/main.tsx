@@ -290,6 +290,10 @@ function App() {
     await refresh();
   };
   const startAttendance = (show: Show) => {
+    if (attendanceEdit?.showId === show.id) {
+      attendanceEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const a = stateRef.current?.data.attendance.find((x) => x.showId === show.id);
     setAttendanceEdit({ showId: show.id, attended: a?.attended ?? true, seat: a?.seat ?? "", note: a?.note ?? "" });
   };
@@ -832,7 +836,7 @@ function App() {
               </p>
               <div className="actions">
                 <CheckIn s={show} />
-                <button className="subtle-button" disabled={busy || !online} onClick={() => startAttendance(show)}><Ticket size={16} /> {mine.some((m) => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</button>
+                <button className="subtle-button" disabled={busy || !online} aria-expanded={attendanceEdit?.showId === show.id} aria-controls="attendance-entry-form" onClick={() => startAttendance(show)}><Ticket size={16} /> {mine.some((m) => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</button>
                 <button className="subtle-button"
                   disabled={busy || !online}
                   onClick={() => startEdit(show)}
@@ -843,7 +847,7 @@ function App() {
               </div>
             </section>
             {attendanceEdit?.showId === show.id && (
-              <section ref={attendanceEditorRef} className="card fields attendance-editor" aria-label="参戦記録の入力">
+              <section id="attendance-entry-form" ref={attendanceEditorRef} className="card fields attendance-editor" aria-label="参戦記録の入力">
                 <h2>{mine.some(m => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</h2>
                 <label className="inline-check"><input type="checkbox" checked={attendanceEdit.attended} onChange={(e) => setAttendanceEdit({...attendanceEdit, attended:e.target.checked})}/> このライブに参戦した</label>
                 <label>座席（任意）<input value={attendanceEdit.seat} onChange={(e) => setAttendanceEdit({...attendanceEdit, seat:e.target.value})}/></label>
