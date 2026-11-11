@@ -105,8 +105,12 @@ function App() {
     generation = useRef(0),
     refreshSeq = useRef(0),
     baseline = useRef<State | null>(null),
-    libraryBase = useRef<State | null>(null);
+    libraryBase = useRef<State | null>(null),
+    attendanceEditorRef = useRef<HTMLElement | null>(null);
   stateRef.current = state;
+  useEffect(() => {
+    if (attendanceEdit?.showId) attendanceEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [attendanceEdit?.showId]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -287,7 +291,7 @@ function App() {
   };
   const startAttendance = (show: Show) => {
     const a = stateRef.current?.data.attendance.find((x) => x.showId === show.id);
-    setAttendanceEdit({ showId: show.id, attended: a?.attended ?? false, seat: a?.seat ?? "", note: a?.note ?? "" });
+    setAttendanceEdit({ showId: show.id, attended: a?.attended ?? true, seat: a?.seat ?? "", note: a?.note ?? "" });
   };
   const saveAttendance = () => void run(async () => {
     if (!state || !attendanceEdit) return;
@@ -838,6 +842,15 @@ function App() {
                 </button>
               </div>
             </section>
+            {attendanceEdit?.showId === show.id && (
+              <section ref={attendanceEditorRef} className="card fields attendance-editor" aria-label="参戦記録の入力">
+                <h2>{mine.some(m => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</h2>
+                <label className="inline-check"><input type="checkbox" checked={attendanceEdit.attended} onChange={(e) => setAttendanceEdit({...attendanceEdit, attended:e.target.checked})}/> このライブに参戦した</label>
+                <label>座席（任意）<input value={attendanceEdit.seat} onChange={(e) => setAttendanceEdit({...attendanceEdit, seat:e.target.value})}/></label>
+                <label>感想（任意）<textarea value={attendanceEdit.note} onChange={(e) => setAttendanceEdit({...attendanceEdit, note:e.target.value})}/></label>
+                <div className="actions"><button className="primary" disabled={busy || !online} onClick={saveAttendance}>保存</button><button onClick={() => setAttendanceEdit(null)}>キャンセル</button></div>
+              </section>
+            )}
             <section className="card setlist-compact">
               <h2>セットリスト</h2>
               {show.hasSavedSetlist && (
@@ -909,15 +922,6 @@ function App() {
                 ))
               )}
             </section>
-            {attendanceEdit?.showId === show.id && (
-              <section className="card fields attendance-editor">
-                <h2>参戦記録を編集</h2>
-                <label className="inline-check"><input type="checkbox" checked={attendanceEdit.attended} onChange={(e) => setAttendanceEdit({...attendanceEdit, attended:e.target.checked})}/> このライブに参戦した</label>
-                <label>座席（任意）<input value={attendanceEdit.seat} onChange={(e) => setAttendanceEdit({...attendanceEdit, seat:e.target.value})}/></label>
-                <label>感想（任意）<textarea value={attendanceEdit.note} onChange={(e) => setAttendanceEdit({...attendanceEdit, note:e.target.value})}/></label>
-                <div className="actions"><button className="primary" disabled={busy || !online} onClick={saveAttendance}>保存</button><button onClick={() => setAttendanceEdit(null)}>キャンセル</button></div>
-              </section>
-            )}
             <section className="card">
               <h2>参戦記録</h2>
               <p>
