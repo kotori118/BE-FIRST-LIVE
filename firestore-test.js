@@ -1,5 +1,6 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+import { startCatalog } from './startup-sync.js';
 import {
   initializeFirestore, memoryLocalCache, doc, getDocFromServer,
   runTransaction, serverTimestamp, collection, query, limit, getDocsFromServer
@@ -8,7 +9,7 @@ import {
 const OWNER_UID = "xBt1XGXQjUg0UI9opk18Y76bucQ2";
 const TEST_PATH = "diagnostics/firestoreConnection";
 const MESSAGE = "BE-FIRST-LIVE connection test";
-let app, auth, db, generation = 0, busy = false;
+let app, auth, db, generation = 0, busy = false, startup;
 const $ = id => document.getElementById(id);
 
 function status(text) { $("firestoreStatus").textContent = text; }
@@ -27,6 +28,7 @@ export function connectFirestoreTest(firebaseApp, firebaseAuth) {
   controls();
 }
 export function updateFirestoreUser(user) {
+  startup?.stop();
   generation++;
   $("firestorePanel").classList.toggle("hide", !user);
   $("gasPanel")?.classList.toggle("hide", !user);
@@ -35,7 +37,41 @@ export function updateFirestoreUser(user) {
     : "本人UIDと異なるアカウントです。データへのアクセスは拒否されます。";
   status("");
   controls();
+  if(user?.uid===OWNER_UID && navigator.onLine) {
+    startup=startCatalog({read:readStartupCatalog,refresh:requestStartupSync,
+      render:songs=>{if($('startupCount'))$('startupCount').textContent=`${songs.length}曲`;},
+      state:value=>{if($('startupState'))$('startupState').textContent=({loading:'前回データを読み込み中',refreshing:'更新確認中',ready:'最新版へ更新しました','initial-error':'データを取得できませんでした','refresh-error':'更新に失敗しました。前回のデータを表示しています。','not-configured':'前回のデータを表示中。起動時同期の接続設定が必要です。'})[value];}
+    });
+  } else { if($('startupCount'))$('startupCount').textContent='—';if($('startupState'))$('startupState').textContent=''; }
 }
+async function readStartupCatalog(){
+  if(!navigator.onLine)throw new Error('offline');
+  const snapshot=await getDocsFromServer(query(collection(db,'universeSongs'),limit(1001)));
+  if(snapshot.size>1000)throw new Error('catalog limit');
+  return snapshot.docs.map(d=>d.data()).filter(s=>s.artist==='BE:FIRST'&&s.available!==false);
+}
+async function requestStartupSync(){
+  const endpoint=localStorage.getItem('liveArchiveSyncEndpoint')||'';
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(endpoint))throw Object.assign(new Error('not configured'),{code:'not-configured'});
+  const id=crypto.randomUUID(),ref=doc(db,'syncRequests','current');
+  await runTransaction(db,async tx=>{await tx.get(ref);tx.set(ref,{requestId:id,requestedAt:serverTimestamp(),state:'PENDING'});});
+  // The response is opaque; the authoritative completion is read from protected Firestore.
+  void fetch(endpoint,{method:'POST',mode:'no-cors',credentials:'omit',headers:{'Content-Type':'text/plain'},body:JSON.stringify({requestId:id})}).catch(()=>{});
+  for(let i=0;i<30;i++){
+    if(!auth?.currentUser||!navigator.onLine)throw new Error('disconnected');
+    await new Promise(resolve=>setTimeout(resolve,2000));
+    const result=await getDocFromServer(ref),value=result.data();
+    if(value?.requestId!==id)throw new Error('replaced');
+    if(value.state==='DONE')return;
+    if(value.state==='ERROR')throw new Error('sync failed');
+  }
+  throw new Error('sync timeout');
+}
+if(document.getElementById('saveSyncEndpoint'))document.getElementById('saveSyncEndpoint').onclick=()=>{
+  const value=document.getElementById('syncEndpoint').value.trim();
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(value)){status('GASのWebアプリURL（末尾/exec）を入力してください。');return;}
+  localStorage.setItem('liveArchiveSyncEndpoint',value);updateFirestoreUser(auth?.currentUser);
+};
 function errorText(error) {
   if (error.code === "permission-denied")
     return "アクセスが拒否されました。本人のGoogleアカウントか確認し、Firebase Consoleで本人限定ルールを公開してください。";

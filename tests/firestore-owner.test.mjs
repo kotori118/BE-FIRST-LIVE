@@ -58,3 +58,10 @@ test('catalog and sync status are read-only for owner and hidden from everyone e
 test('owner can delete the disposable connection test record', async () => {
   await assertSucceeds(deleteDoc(doc(ownerDb(), PATH)));
 });
+test('startup sync requests require owner, fresh server time and PENDING only',async()=>{
+ const owner=doc(ownerDb(),'syncRequests/current'),value=()=>({requestId:'00000000-0000-4000-8000-000000000001',requestedAt:serverTimestamp(),state:'PENDING'});
+ await assertSucceeds(setDoc(owner,value()));
+ await assertFails(setDoc(owner,{...value(),state:'DONE'}));
+ await assertFails(setDoc(owner,{...value(),requestedAt:Timestamp.fromMillis(1)}));
+ await assertFails(setDoc(doc(env.unauthenticatedContext().firestore(),'syncRequests/current'),value()));
+});

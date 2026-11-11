@@ -63,6 +63,7 @@ function emulatorRuntime(){
   let rows=[header,row], failCommit=false, loseReply=false;
   const calls=[];
   const context=vm.createContext({console:{log(){}},PropertiesService:{getScriptProperties:()=>({getProperty:key=>key==='FIREBASE_PROJECT_ID'?'demo-live-connection':null})},
+    ContentService:{createTextOutput:value=>value},
     SpreadsheetApp:{openById:()=>{throw new Error('SpreadsheetApp would require broader source permissions');}},
     ScriptApp:{getOAuthToken:()=> 'owner'},Utilities:{getUuid:randomUUID},LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
     UrlFetchApp:{fetch:(url,options)=>{
@@ -108,6 +109,16 @@ test('actual REST sync: atomic catalog, no-op diff, source failure preservation 
   assert.equal(c.syncUniverseSongs().removed,1);assert.equal(c.liveCatalog_(cfg)['5001'],undefined);assert.equal(c.liveCatalog_(cfg)['1001'].data.title,'Renamed');
   assert.ok(rt.calls.some(x=>x.body?.writes?.some(w=>w.delete?.endsWith('/universeSongs/5001'))));
   assert.equal(c.previewUniverseSync().removed,0);
+  // Unauthenticated transport cannot trigger work without an owner-created nonce.
+  assert.equal(c.doPost({postData:{contents:'{}'}}),'invalid');
+  const nonce=randomUUID(),requestPath='syncRequests/current';
+  const previous=c.liveRequest_('get',cfg.database+'/documents/'+requestPath,null,true);
+  const requestFields=c.LiveSongSyncCore.encode({requestId:nonce,state:'PENDING'});requestFields.requestedAt={timestampValue:new Date().toISOString()};
+  c.liveRequest_('post',cfg.database+'/documents:commit',{writes:[c.liveWrite_(cfg,requestPath,requestFields,previous?.updateTime)]});
+  assert.equal(c.doPost({postData:{contents:JSON.stringify({requestId:randomUUID()})}}),'rejected');
+  assert.equal(c.doPost({postData:{contents:JSON.stringify({requestId:nonce})}}),'accepted');
+  assert.equal(c.LiveSongSyncCore.decode(c.liveRequest_('get',cfg.database+'/documents/'+requestPath).fields).state,'DONE');
+  assert.equal(c.doPost({postData:{contents:JSON.stringify({requestId:nonce})}}),'rejected');
 });
 test('source scope stays read-only and API errors include the enabling project without credentials',()=>{
   const manifest=JSON.parse(readFileSync('gas/appsscript.json','utf8'));

@@ -200,3 +200,31 @@ function installLiveTimeTrigger() {
   if (!exists) ScriptApp.newTrigger(handler).timeBased().everyMinutes(15).create();
   return {installed:true,intervalMinutes:15};
 }
+
+/** Public transport, private authorization: only an owner-created Firestore request is accepted.
+ * No ID token, OAuth token, API key or song data crosses this transport.
+ * Deploy as owner only after copying the request-specific Security Rules.
+ */
+function doPost(e) {
+  var body;
+  try { body = JSON.parse(e.postData.contents); } catch (ignored) { return ContentService.createTextOutput('invalid'); }
+  if (!body || !/^[a-f0-9-]{36}$/.test(body.requestId || '') || Object.keys(body).length !== 1) return ContentService.createTextOutput('invalid');
+  var cfg = liveConfig_(), path = 'syncRequests/current';
+  var request = liveRequest_('get',cfg.database+'/documents/'+path,null,true);
+  if (!request) return ContentService.createTextOutput('rejected');
+  var data = LiveSongSyncCore.decode(request.fields), age = Date.now()-Date.parse(data.requestedAt);
+  if (data.requestId !== body.requestId || data.state !== 'PENDING' || !isFinite(age) || age<0 || age>120000) return ContentService.createTextOutput('rejected');
+  var fields = JSON.parse(JSON.stringify(request.fields)); fields.state={stringValue:'RUNNING'};
+  // Compare-and-set consumes the request exactly once, rejecting parallel replays.
+  try { liveRequest_('post',cfg.database+'/documents:commit',{writes:[liveWrite_(cfg,path,fields,request.updateTime)]}); }
+  catch (ignored) { return ContentService.createTextOutput('rejected'); }
+  try {
+    var result=syncUniverseSongs();
+    fields.state={stringValue:result.ok?'DONE':'ERROR'};
+  } catch (ignored) { fields.state={stringValue:'ERROR'}; }
+  var current=liveRequest_('get',cfg.database+'/documents/'+path,null,true);
+  if(current && LiveSongSyncCore.decode(current.fields).requestId===body.requestId) {
+    try { liveRequest_('post',cfg.database+'/documents:commit',{writes:[liveWrite_(cfg,path,fields,current.updateTime)]}); } catch(ignored){}
+  }
+  return ContentService.createTextOutput('accepted');
+}

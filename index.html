@@ -30,6 +30,7 @@ footer{color:#738c90;text-align:center;font-size:12px;margin:26px auto}
 </section>
 <section class="panel hide" id="firestorePanel">
 <h2>③ Firestoreを確認</h2>
+<p>楽曲 <strong id="startupCount">—</strong></p><p id="startupState" role="status" aria-live="polite"></p>
 <p id="ownerStatus"></p>
 <p>先に下のルールをコピーして、Firebase Console → Firestore Database → ルールへ貼り付けて「公開」を押してね。</p>
 <button class="secondary" id="copyRules">本人限定ルールをコピー</button>
@@ -44,6 +45,7 @@ footer{color:#738c90;text-align:center;font-size:12px;margin:26px auto}
 </section>
 <section class="panel hide" id="gasPanel">
 <h2>④ Universeの楽曲同期</h2><p>同期対象はArtist=BE:FIRSTの曲だけ（現在66曲）。旧コードで全157曲を保存した場合は、コード更新後にプレビューで対象外キャッシュの除外件数を確認してね。詳しい手順は下のリンクから。</p>
+<label>起動時同期のGAS URL<input id="syncEndpoint" type="url" placeholder="https://script.google.com/macros/s/…/exec" style="width:100%;padding:12px"></label><button id="saveSyncEndpoint" class="secondary">起動時同期を接続</button>
 <p>既存Universeとは別の、新しいApps Scriptを使うよ。最初は接続確認だけを実行してね。</p>
 <button class="secondary" id="copyGas">GASコードをコピー</button>
 <details id="gasDetails"><summary>GASコードを見る</summary><textarea id="gasText" readonly spellcheck="false" aria-label="Universe同期GASコード"></textarea></details>
@@ -56,7 +58,7 @@ footer{color:#738c90;text-align:center;font-size:12px;margin:26px auto}
 <p id="status" role="status" aria-live="polite"></p>
 <footer>テスト専用・公演／セトリ／参戦履歴は読み書きしません</footer>
 <script type="module">
-import { connectFirestoreTest, updateFirestoreUser } from "./firestore-test.js?v=20261111-befirst-only-1";
+import { connectFirestoreTest, updateFirestoreUser } from "./firestore-test.js?v=20261111-background-1";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 const $=id=>document.getElementById(id);

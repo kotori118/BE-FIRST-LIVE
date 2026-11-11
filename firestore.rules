@@ -27,6 +27,15 @@ service cloud.firestore {
       allow get: if isOwner();
       allow write: if false;
     }
+    match /syncRequests/current {
+      allow get: if isOwner();
+      allow create, update: if isOwner()
+        && request.resource.data.keys().hasOnly(['requestId','requestedAt','state'])
+        && request.resource.data.requestId is string
+        && request.resource.data.requestId.matches('^[a-f0-9-]{36}$')
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.state == 'PENDING';
+    }
     match /{document=**} {
       allow read, write: if false;
     }

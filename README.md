@@ -47,3 +47,9 @@ npm test
 ```
 
 `demo-live-connection` のFirestoreエミュレーターだけを使用し、実プロジェクトへ接続しません。
+
+## 起動時のバックグラウンド更新
+
+前回のFirestoreスナップショットを先に表示し、更新確認中の表示を出して裏で同期。成功時のみ再読込し、失敗時は前回表示を維持します。永続ブラウザーキャッシュやオフライン機能は追加しません。未接続なら「起動時同期の接続設定が必要」と表示し、最新版と偽りません。定時同期は不要です。
+
+GAS公開URLへのPOSTは非公開データやIDトークンを含まず、本人Google UIDだけがFirestoreへ作成できるsyncRequests/currentの一度限り要求IDを渡します。GASは要求ID・PENDING状態・サーバー作成時刻120秒以内を照合し、updateTimeによるCASで消費してから実行。完了は認証済みFirestoreから取得します。API公開の権限設定とブラウザーの実動作は本人のGoogle環境で最終検証が必要です。手順はdocs/GAS_SETUP.html。
