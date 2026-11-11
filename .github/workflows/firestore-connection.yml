@@ -1,0 +1,21 @@
+name: Verify Firestore connection rules
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --no-audit --no-fund
+      - run: node --check firestore-test.js
+      - run: npm test
