@@ -36,6 +36,35 @@ service cloud.firestore {
         && request.resource.data.requestedAt == request.time
         && request.resource.data.state == 'PENDING';
     }
+    match /users/{uid}/control/state {
+      allow read: if isOwner() && uid == request.auth.uid;
+      allow create: if isOwner() && uid == request.auth.uid
+        && request.resource.data.revision == 0
+        && request.resource.data.previousDatasetId == null
+        && getAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(request.resource.data.activeDatasetId)).data.ready == true;
+      allow update: if isOwner() && uid == request.auth.uid
+        && request.resource.data.revision == resource.data.revision + 1
+        && getAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(request.resource.data.activeDatasetId)).data.ready == true;
+    }
+    match /users/{uid}/datasets/{datasetId} {
+      allow read: if isOwner() && uid == request.auth.uid;
+      allow create: if isOwner() && uid == request.auth.uid
+        && request.resource.data.ready is bool
+        && request.resource.data.schemaVersion == 1;
+      allow update: if isOwner() && uid == request.auth.uid && resource.data.ready == false && request.resource.data.ready == true && request.resource.data.schemaVersion == 1;
+      match /{kind}/{entityId} {
+        function editable() {
+          return isOwner() && uid == request.auth.uid
+            && kind in ['tours','shows','templates','overrides','directEntries','entryFacts','localSongs','songMetadata','releases','releaseTracks','attendance']
+            && get(/databases/$(database)/documents/users/$(uid)/control/state).data.activeDatasetId == datasetId
+            && getAfter(/databases/$(database)/documents/users/$(uid)/control/state).data.revision == get(/databases/$(database)/documents/users/$(uid)/control/state).data.revision + 1;
+        }
+        allow read: if isOwner() && uid == request.auth.uid;
+        allow create: if isOwner() && uid == request.auth.uid && kind in ['tours','shows','templates','overrides','directEntries','entryFacts','localSongs','songMetadata','releases','releaseTracks','attendance'] && request.resource.data.id == entityId && request.resource.data.revision is int && ((editable() && request.resource.data.revision == 0) || get(/databases/$(database)/documents/users/$(uid)/datasets/$(datasetId)).data.ready == false);
+        allow update: if editable() && request.resource.data.id == entityId && request.resource.data.revision == resource.data.revision + 1;
+        allow delete: if editable();
+      }
+    }
     match /{document=**} {
       allow read, write: if false;
     }

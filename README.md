@@ -1,55 +1,49 @@
 # BE-FIRST-LIVE
 
-LIVE ARCHIVE専用。現在のmainはGoogleログイン・Firestore接続・GASによる楽曲同期の確認用です。本体は `migration/live-archive-foundation-20261111` に保存されています。
+BE:FIRST LIVE ARCHIVE専用リポジトリ。正本はGoogle Driveの「BE:FIRST LIVE ARCHIVE｜アプリ設計書」（現在v0.26、2026-11-11）。確定したWhite Aqua Glassの既存画面と共通データモデルを移行し、Spark無料構成へ接続しています。
 
-## 同期対象（2026-11-11本人指定）
+## 今回使える画面
 
-06_Songsの **Artist=BE:FIRSTだけ** を同期します。BE:FIRST内ユニット曲もこのArtistなら含め、UNIT・他グループ・他名義・空欄は対象外です。現在は66曲。`sourceCount`は同期対象曲数を表します。
+- `app/app-entry.html`: Googleログイン後の本体。既存の接続テストで保存したFirebase設定・GAS URLをそのまま使用。
+- `app/app-entry.html?trial=1`: 公開情報の1ツアー・4公演、3/3のみ29曲の試験表示。参加記録0件から開始。操作はメモリ内だけで本番へ書き込まない。
+- `index.html`: 接続設定・ルールコピー・既存GAS接続テスト。
 
-旧コードによる全157曲の保存は成功済み。更新したCode.gsで`previewUniverseSync`を実行すると、他の変更がなければsourceCount=66、added=0、updated=0、unavailable=0、removed=91になります。確認して`syncUniverseSongs`を実行すると、対象外のU:キャッシュ91件だけをFirestoreから除外します。Universe元データ、L:曲、作品補完、公演、参戦、予想は処理対象外。曲の除外と同期成功状態を単一commitで確定し、失敗時は元のキャッシュを維持します。これは過去公演の初期投入とは別の同期対象修正です。
-
-## GASの接続確認
-
-2026-11-11修正：実GASでSpreadsheetApp.openByIdの権限エラーを確認し、Sheets API values.getへ変更。manifestはspreadsheets.readonlyのままで、ソースの書込権限は追加しません。旧コードを貼付済みの場合は、テストページを再読み込みしてGASコードをコピーし、Code.gsだけを置き換えて再実行します。API未有効などの403はサービス名・理由・対象consumer projectを表示するため、秘密情報を送らずエラーを共有できます。
-
-本人によるFirestore保存・再読込・未ログイン拒否の確認が完了。次は公開ページの「④ Universeの楽曲同期」から、**新しい独立したApps Script**へコードとmanifestをコピーし、`checkLiveConnection`を実行します。手順は `docs/GAS_SETUP.html`。
-
-`checkLiveConnection`はUniverseを読み、Firestoreへ技術的な接続確認1件だけを書きます。初回の実Google OAuth/IAM検証はユーザーのGAS環境で必要です。成功した後に `previewUniverseSync`（読取のみ）→`syncUniverseSongs`（差分を原子的に保存）の順で進めます。手動同期後に本人が選んだ場合のみ、15分間隔の定時トリガーを作成します。編集トリガーは読取専用権限での動作確認待ちです。
-
-楽曲が同期できても公演・参戦の初期一括登録は行いません。同期用データはUniverseの正本のキャッシュだけで、LIVE限定曲・参戦・保存済み予想には触れません。ルールは本人だけに楽曲/同期状態の読取を許可し、クライアントからの曲書込を禁止。GASはGoogle OAuthとIAMで更新します。起動時にSheetsへ直接取得する構成ではないため、最終同期時刻を表示します。
-
-検証：ソース欠損/重複、改名、削除曲の参照保持、過大バッチの中止、RESTによる原子的なcommit、失敗時の保持、応答消失後の成功確認、本人限定/楽曲読取専用の17テスト。すべてローカルエミュレーターで通過。本人の実Google権限によるGAS接続確認と旧コードの全157曲同期は成功済み。BE:FIRST限定の66曲への整理と定時トリガーは、更新コードを本人が実行した結果で確認します。
+HOME、ツアー別LIVE一覧、参加チェック、セトリ・座席メモ編集、MY LIVE、楽曲ランキング・披露率、設定の基本画面を接続。予想・バックテストは後段です。Phase 1の全受入完了を意味しません。残件は `docs/IMPLEMENTATION_STATUS.md`。
 
 ## 次の本人操作
 
-1. いつもの公開ページを再読み込みし、Googleログインする。
-2. 「本人限定ルールをコピー」を押す。
-3. Firebase Consoleの対象プロジェクト（`live-record-3e3b6`）で Firestore Database → ルールを開き、既存の全件拒否ルールをコピーした内容に置き換えて「公開」。このルールは本人Google UIDによる接続テスト1件だけを許可し、他のパスは全件拒否のままです。
-4. ページへ戻り「テストデータ1件を保存」。保存成功とサーバー読取成功を確認。
-5. ページを再読み込みし、必要ならGoogleログインして「サーバーから読み直す」。同じ保存日時が表示されることを確認。
-6. 「未ログインのアクセス拒否を確認」で拒否を確認。この操作は別の未認証Firebase Appを使い、本人のログインは維持します。
+1. いつもの接続テストページを再読み込みし、「本人限定ルールをコピー」。
+2. Firebase Consoleの `live-record-3e3b6` → Firestore Database → ルールへ全文を貼り付け「公開」。今回は本人専用の本体保存先を追加しているため、以前のルールのままでは本体を使えません。
+3. 接続テストページから「LIVE ARCHIVE本体を開く」。既存のGoogleログインと設定を使用します。
+4. 「試験データで確認する」では登録せずに画面を確認できます。本体は最初は空です。歴代公演・参戦履歴の初期一括投入は未実施で、本人承認後です。
 
-他のGoogleアカウントの拒否は、自分が管理する別アカウントでログインして読取が拒否されることを確認できます。ルールのエミュレーターテストにも含めています。
+GASコード・manifest・デプロイ・保存済みURLの変更は今回不要。実プロジェクトへのルール公開とiPhone/PCの保存・再読込は本人環境で確認します。
 
-## 保存するもの
+## 楽曲同期
 
-`diagnostics/firestoreConnection` の1件だけです。固定メッセージとサーバー時刻を保存し、実際の公演・曲・参戦履歴には触れません。ルールのFirebase Console反映と、実プロジェクトでの保存試験は本人操作が必要で、コード公開だけでは完了しません。
+Universe `06_Songs` のArtistをtrimした値が `BE:FIRST` の曲だけを同期（直近の本人確認で66曲）。他グループ・UNIT・空欄は除外。BE:FIRST内ユニット曲もArtistがBE:FIRSTなら対象。Universeへの変更は行いません。LIVE限定カバー等は独立した `L:` 参照です。
 
-Spark無料プラン・請求先登録なしを維持。Cloud Functionsは使用しません。接続テストと本人用の同期結果読取以外、本体コレクションのルールはまだ追加していません。同期元Universeと本体移行ブランチは変更していません。
+本人による保存・再読込・匿名拒否・GAS接続・対象外91曲の除外・66曲同期・起動時更新の実動作確認が完了しています。起動時はFirestoreの前回値を先に表示し、GASを裏で実行。成功後に再読込、失敗時は前回値とエラーを表示。15分トリガーは不要です。
 
-## 開発用ルールテスト
+公開GAS URLへのPOSTにはUUIDだけを渡します。本人だけがFirestoreに作れる期限120秒の要求を、GASが要求ID・PENDING・時刻で照合し、CASで消費してから実行。完了結果は認証済みFirestoreから読みます。非公開SheetsのデータやIDトークンをURLへ送信しません。
 
-Node 22以降、Java 21。
+`gas/UniverseSync.gs` は独立GAS専用です。既存Universe GASへ追加しないでください。手順は `docs/GAS_SETUP.html`。
+
+## 本体データと安全性
+
+`users/{ownerUid}/control/state` にactiveDatasetId、previousDatasetId、revisionを保持。各データセットはtours / shows / templates / overrides / directEntries / entryFacts / localSongs / songMetadata / releases / releaseTracks / attendanceの11コレクションです。スキーマは `shared/model.ts`、参照検証と集計は `shared/domain.ts` に集約。
+
+本人Google UID以外は読書き不可。楽曲キャッシュは本人も読取のみ、更新はGASのIAM経由。編集は全体revisionと対象entity revisionで競合検知し、無条件上書きしません。復元は別領域に保存・読戻し照合した後にactiveポインターを原子的に切替え、直前のデータを残します。オフライン編集は提供しません。
+
+## 開発と検証
+
+Node 22、Java 21。
 
 ```sh
 npm ci
 npm test
+npm run test:body
+npm run build
 ```
 
-`demo-live-connection` のFirestoreエミュレーターだけを使用し、実プロジェクトへ接続しません。
-
-## 起動時のバックグラウンド更新
-
-前回のFirestoreスナップショットを先に表示し、更新確認中の表示を出して裏で同期。成功時のみ再読込し、失敗時は前回表示を維持します。永続ブラウザーキャッシュやオフライン機能は追加しません。未接続なら「起動時同期の接続設定が必要」と表示し、最新版と偽りません。定時同期は不要です。
-
-GAS公開URLへのPOSTは非公開データやIDトークンを含まず、本人Google UIDだけがFirestoreへ作成できるsyncRequests/currentの一度限り要求IDを渡します。GASは要求ID・PENDING状態・サーバー作成時刻120秒以内を照合し、updateTimeによるCASで消費してから実行。完了は認証済みFirestoreから取得します。API公開の権限設定とブラウザーの実動作は本人のGoogle環境で最終検証が必要です。手順はdocs/GAS_SETUP.html。
+ルール/GAS/起動処理はFirestoreエミュレーターだけで検証し、実プロジェクトへ書き込みません。本体ビルドは `app/`、接続ページと共にGitHub Pagesで配信します。元の移行ブランチは保全。設計・不足項目の監査記録は `docs/IMPLEMENTATION_STATUS.md`、試験データの出典は `docs/TRIAL_DATA.md`。

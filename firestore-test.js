@@ -1,3 +1,4 @@
+import {requestSync} from './sync-request.js';
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { startCatalog } from './startup-sync.js';
@@ -50,23 +51,7 @@ async function readStartupCatalog(){
   if(snapshot.size>1000)throw new Error('catalog limit');
   return snapshot.docs.map(d=>d.data()).filter(s=>s.artist==='BE:FIRST'&&s.available!==false);
 }
-async function requestStartupSync(){
-  const endpoint=localStorage.getItem('liveArchiveSyncEndpoint')||'';
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(endpoint))throw Object.assign(new Error('not configured'),{code:'not-configured'});
-  const id=crypto.randomUUID(),ref=doc(db,'syncRequests','current');
-  await runTransaction(db,async tx=>{await tx.get(ref);tx.set(ref,{requestId:id,requestedAt:serverTimestamp(),state:'PENDING'});});
-  // The response is opaque; the authoritative completion is read from protected Firestore.
-  void fetch(endpoint,{method:'POST',mode:'no-cors',credentials:'omit',headers:{'Content-Type':'text/plain'},body:JSON.stringify({requestId:id})}).catch(()=>{});
-  for(let i=0;i<30;i++){
-    if(!auth?.currentUser||!navigator.onLine)throw new Error('disconnected');
-    await new Promise(resolve=>setTimeout(resolve,2000));
-    const result=await getDocFromServer(ref),value=result.data();
-    if(value?.requestId!==id)throw new Error('replaced');
-    if(value.state==='DONE')return;
-    if(value.state==='ERROR')throw new Error('sync failed');
-  }
-  throw new Error('sync timeout');
-}
+async function requestStartupSync(){return requestSync({db,auth,doc,runTransaction,serverTimestamp,getDocFromServer});}
 if(document.getElementById('saveSyncEndpoint'))document.getElementById('saveSyncEndpoint').onclick=()=>{
   const value=document.getElementById('syncEndpoint').value.trim();
   if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(value)){status('GASのWebアプリURL（末尾/exec）を入力してください。');return;}

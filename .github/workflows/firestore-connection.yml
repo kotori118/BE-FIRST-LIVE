@@ -19,3 +19,6 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: node --check firestore-test.js
       - run: npm test
+
+      - run: npm run test:body
+      - run: npm run build

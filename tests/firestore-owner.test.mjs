@@ -65,3 +65,17 @@ test('startup sync requests require owner, fresh server time and PENDING only',a
  await assertFails(setDoc(owner,{...value(),requestedAt:Timestamp.fromMillis(1)}));
  await assertFails(setDoc(doc(env.unauthenticatedContext().firestore(),'syncRequests/current'),value()));
 });
+
+test('app data: atomic bootstrap, versioned edits, isolated staging and restore switch',async()=>{
+ const db=ownerDb(),control=doc(db,'users',OWNER_UID,'control','state'),base=`users/${OWNER_UID}/datasets`;
+ await assertSucceeds(runTransaction(db,async tx=>{tx.set(doc(db,base,'app-test'),{ready:true,schemaVersion:1});tx.set(control,{activeDatasetId:'app-test',previousDatasetId:null,revision:0});}));
+ const item=doc(db,base,'app-test','localSongs','test-song');
+ await assertFails(setDoc(item,{id:'test-song',revision:0,title:'Song'}));
+ await assertSucceeds(runTransaction(db,async tx=>{await tx.get(control);tx.set(item,{id:'test-song',revision:0,title:'Song'});tx.update(control,{revision:1});}));
+ await assertFails(runTransaction(db,async tx=>{await tx.get(control);tx.update(item,{revision:0,title:'Stale'});tx.update(control,{revision:2});}));
+ await assertSucceeds(setDoc(doc(db,base,'stage-test'),{ready:false,schemaVersion:1}));
+ await assertSucceeds(setDoc(doc(db,base,'stage-test','localSongs','restored'),{id:'restored',revision:7,title:'Restored'}));
+ await assertFails(runTransaction(db,async tx=>{await tx.get(control);tx.update(control,{activeDatasetId:'stage-test',previousDatasetId:'app-test',revision:2});}));
+ await assertSucceeds(runTransaction(db,async tx=>{await tx.get(control);tx.update(doc(db,base,'stage-test'),{ready:true});tx.update(control,{activeDatasetId:'stage-test',previousDatasetId:'app-test',revision:2});}));
+ await assertFails(setDoc(doc(env.authenticatedContext('outsider').firestore(),base,'stage-test','localSongs','bad'),{id:'bad',revision:0}));
+});
