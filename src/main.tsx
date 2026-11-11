@@ -497,8 +497,8 @@ function App() {
   return (
     <div className="app">
       <header>
-        <button className="brand" onClick={() => navigate("HOME")}>
-          BE:FIRST<span>LIVE ARCHIVE</span>
+        <button className="brand" aria-label="BE:LIVE - HOMEへ" onClick={() => navigate("HOME")}>
+          <img src={import.meta.env.BASE_URL + "be-live-logo.svg"} alt="BE:LIVE" className="brand-logo" />
         </button>
         <button
           className="icon"
