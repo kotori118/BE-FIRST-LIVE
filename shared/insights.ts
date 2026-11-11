@@ -44,14 +44,27 @@ export function songArchive(data: Dataset, shows: Show[], ref: string) {
   const tours = group(history.map((h) => data.tours.find((t) => t.id === h.show.tourId)?.name ?? h.show.name));
   const first = history[0]?.show.date ?? null;
   const last = history.at(-1)?.show.date ?? null;
+  const averageOrder = history.length ? history.reduce((sum,h)=>sum+h.order,0)/history.length : null;
+  const daysSinceLast = last ? Math.max(0, Math.floor((Date.now()-Date.parse(last+"T00:00:00Z"))/86400000)) : null;
   return {
     history, performances: history.length, shows: uniqueShows.size, knownShows,
     rate: knownShows ? uniqueShows.size / knownShows : null,
-    first, last, yearly, tours,
+    first, last, yearly, tours, averageOrder, daysSinceLast,
     full: history.filter((h) => h.entry.version === "FULL").length,
     short: history.filter((h) => h.entry.version === "SHORT").length,
     medley: history.filter((h) => !!h.entry.medleyGroup).length,
     opening: history.filter((h) => h.order === 1).length,
     encore: history.filter((h) => h.entry.section === "ENCORE").length,
   };
+}
+
+/** Local-only CSV export. No network request or public data publication. */
+export function exportShowsCsv(data: Dataset): string {
+  const quote = (v: unknown) => '"' + String(v ?? "").replaceAll('"', '""') + '"';
+  const rows = [["公演日","ライブ名","会場","都道府県","公演回","参戦","座席","感想","セトリ登録"]];
+  for (const show of [...data.shows].sort((a,b)=>a.date.localeCompare(b.date))) {
+    const a = data.attendance.find(x=>x.showId===show.id);
+    rows.push([show.date, data.tours.find(t=>t.id===show.tourId)?.name ?? show.name, show.venue, prefecture(show.region) ?? "", show.slot, a?.attended ? "はい" : "いいえ", a?.seat ?? "", a?.note ?? "", show.hasSavedSetlist ? "はい" : "いいえ"]);
+  }
+  return "\uFEFF" + rows.map(row=>row.map(quote).join(",")).join("\r\n");
 }

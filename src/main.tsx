@@ -45,7 +45,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { attendanceStats, songArchive } from "../shared/insights";
+import { attendanceStats, songArchive, exportShowsCsv } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -329,7 +329,7 @@ function App() {
       const data = copy(baseline.current.data),
         s = edit.show,
         entries = edit.entries;
-      if(s.tourId && !s.templateId) throw new Error("ツアー公演では基本セトリを選択してください。設定の「公演・基本セトリ」から作成できます");
+      if(s.tourId && !s.templateId && entries.length) throw new Error("ツアー公演のセトリを入力するには、ライブ管理で基本セトリを作成してください");
       data.entryFacts = [
         ...data.entryFacts.filter((f) => f.showId !== s.id),
         ...edit.facts,
@@ -345,7 +345,7 @@ function App() {
       data.entryFacts = data.entryFacts.filter(
         (f) => !orphanFacts.some((o) => o.id === f.id),
       );
-      s.hasSavedSetlist = true;
+      s.hasSavedSetlist = !!(s.hasSavedSetlist || s.templateId || entries.length);
       if (s.templateId) {
         const template = data.templates.find((t) => t.id === s.templateId)!;
         const ops = deriveOverrides(template.entries, entries);
@@ -358,7 +358,7 @@ function App() {
           templateId: s.templateId,
           operations: ops,
         });
-      } else {
+      } else if (!s.tourId && s.hasSavedSetlist) {
         const old = data.directEntries.find((x) => x.showId === s.id);
         data.directEntries = data.directEntries.filter(
           (x) => x.showId !== s.id,
@@ -411,7 +411,7 @@ function App() {
     return (
       <div className="login">
         <div className="wordmark">
-          <img src="/be-live-logo.svg" alt="BE:LIVE" className="brand-logo" />
+          <img src={import.meta.env.BASE_URL + "be-live-logo.svg"} alt="BE:LIVE" className="brand-logo" />
         </div>
         <div className="glass login-card">
           <Disc3 size={44} />
@@ -811,7 +811,7 @@ function App() {
           </>
         ) : show ? (
           <>
-            <button className="back-link" onClick={() => { setShowId(null); setAttendanceEdit(null); }}><ArrowLeft size={16} /> ライブ一覧へ</button>
+            <button className="back-link" onClick={() => { setShowId(null); setAttendanceEdit(null); }}><ArrowLeft size={16} /> {tab === "ANALYSIS" ? "分析に戻る" : "ライブ一覧へ"}</button>
             <section className="glass hero">
               <p className="eyebrow">
                 {show.date.replaceAll("-", ".")} · {formatLabel(show.format)}
@@ -1072,9 +1072,9 @@ function App() {
                 {songDetail ? (() => {
                   const detail = songArchive(data, shownShows, songDetail);
                   return <>
-                    <section className="glass song-hero"><p className="eyebrow">SONG ARCHIVE</p><h2>{title(songDetail)}</h2><div className="song-metrics"><span><strong>{detail.performances}</strong>披露回数</span><span><strong>{detail.shows}</strong>披露公演数</span><span><strong>{detail.rate === null ? "—" : (detail.rate*100).toFixed(1)+"%"}</strong>披露率</span></div><p>最初の記録：{detail.first ?? "—"} ／ 最新：{detail.last ?? "—"}</p></section>
-                    <section className="card"><h2>披露の傾向</h2><div className="stats-row"><span>FULL / SHORT</span><strong>{detail.full} / {detail.short}</strong></div><div className="stats-row"><span>メドレー内</span><strong>{detail.medley}回</strong></div><div className="stats-row"><span>オープニング</span><strong>{detail.opening}回</strong></div><div className="stats-row"><span>アンコール</span><strong>{detail.encore}回</strong></div></section>
-                    <section className="card"><h2>年別の披露回数</h2>{detail.yearly.map(([y,n]) => <div className="stats-row" key={y}><span>{y}年</span><strong>{n}回</strong></div>)}</section>
+                    <section className="glass song-hero"><p className="eyebrow">SONG ARCHIVE</p><h2>{title(songDetail)}</h2><div className="song-metrics"><span><strong>{detail.performances}</strong>披露回数</span><span><strong>{detail.shows}</strong>披露公演数</span><span><strong>{detail.rate === null ? "—" : (detail.rate*100).toFixed(1)+"%"}</strong>披露率</span></div><p>最初の記録：{detail.first ?? "—"} ／ 最新：{detail.last ?? "—"}{detail.daysSinceLast !== null && detail.daysSinceLast >= 365 ? ` ／ 最終披露から約${(detail.daysSinceLast/365.25).toFixed(1)}年` : ""}</p></section>
+                    <section className="card"><h2>披露の傾向</h2><div className="stats-row"><span>FULL / SHORT</span><strong>{detail.full} / {detail.short}</strong></div><div className="stats-row"><span>メドレー内</span><strong>{detail.medley}回</strong></div><div className="stats-row"><span>平均曲順</span><strong>{detail.averageOrder === null ? "—" : detail.averageOrder.toFixed(1)+"曲目"}</strong></div><div className="stats-row"><span>オープニング</span><strong>{detail.opening}回</strong></div><div className="stats-row"><span>アンコール</span><strong>{detail.encore}回</strong></div></section>
+                    <section className="card"><h2>年別の披露回数</h2>{detail.yearly.map(([y,n]) => <div className="stats-row" key={y}><span>{y}年</span><strong>{n}回 <small>FULL {detail.history.filter(h=>h.show.date.startsWith(y)&&h.entry.version==="FULL").length} / SHORT {detail.history.filter(h=>h.show.date.startsWith(y)&&h.entry.version==="SHORT").length}</small></strong></div>)}</section>
                     <section className="card"><h2>ライブ別の披露回数</h2>{detail.tours.map(([t,n]) => <div className="stats-row" key={t}><span>{t}</span><strong>{n}回</strong></div>)}</section>
                     <section className="card"><h2>披露された公演</h2>{[...detail.history].reverse().map((h,i) => <button className="history-row" key={h.show.id+":"+h.entry.id+":"+i} onClick={() => openShow(h.show)}><span><strong>{h.show.date} · {h.show.venue}</strong><small>{data.tours.find(t => t.id === h.show.tourId)?.name ?? h.show.name}</small></span><span>{h.order}/{h.total}曲目 · {h.entry.version ?? "—"}{h.entry.section === "ENCORE" ? " · アンコール" : ""}</span></button>)}{!detail.history.length && <p className="empty">対象範囲に披露記録がありません</p>}</section>
                   </>;
@@ -1188,6 +1188,7 @@ function App() {
                     <Download size={16} />
                     JSONを書き出す
                   </button>
+                  <button disabled={busy || !online} onClick={() => download("be-live-shows.csv", exportShowsCsv(data), "text/csv;charset=utf-8")}><Download size={16}/> 公演・参戦記録をCSVで書き出す</button>
                   <label className="file-button">
                     <Upload size={16} />
                     JSONから復元

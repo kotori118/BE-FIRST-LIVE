@@ -1,6 +1,6 @@
 # BE-FIRST-LIVE
 
-BE:FIRST LIVE ARCHIVE専用リポジトリ。正本はGoogle Driveの「BE:FIRST LIVE ARCHIVE｜アプリ設計書」（現在v0.26、2026-11-11）。確定したWhite Aqua Glassの既存画面と共通データモデルを移行し、Spark無料構成へ接続しています。
+BE:LIVE専用リポジトリ。正本はGoogle Driveの「BE:LIVE｜アプリ設計書」（現在v0.27、2026-11-12）。確定したWhite Aqua Glassの既存画面と共通データモデルを移行し、Spark無料構成へ接続しています。
 
 ## 今回使える画面
 
@@ -8,7 +8,7 @@ BE:FIRST LIVE ARCHIVE専用リポジトリ。正本はGoogle Driveの「BE:FIRST
 - `app/app-entry.html?trial=1`: 公開情報の1ツアー・4公演、3/3のみ29曲の試験表示。参加記録0件から開始。操作はメモリ内だけで本番へ書き込まない。
 - `index.html`: 接続設定・ルールコピー・既存GAS接続テスト。
 
-HOME、ツアー別LIVE一覧、参加チェック、セトリ・座席メモ編集、MY LIVE、楽曲ランキング・披露率、設定の基本画面を接続。予想・バックテストは後段です。Phase 1の全受入完了を意味しません。残件は `docs/IMPLEMENTATION_STATUS.md`。
+HOME、LIVE内MY LIVE／ALL LIVE切替、参戦記録の詳細編集、MY LIVE STATS、SONG ARCHIVE、楽曲ランキング・披露率、共通セトリエディタ、設定の登録・管理画面を接続。予想・バックテストは後段です。Phase 1の全受入完了を意味しません。残件は `docs/IMPLEMENTATION_STATUS.md`。
 
 ## 次の本人操作
 
@@ -47,3 +47,13 @@ npm run build
 ```
 
 ルール/GAS/起動処理はFirestoreエミュレーターだけで検証し、実プロジェクトへ書き込みません。本体ビルドは `app/`、接続ページと共にGitHub Pagesで配信します。元の移行ブランチは保全。設計・不足項目の監査記録は `docs/IMPLEMENTATION_STATUS.md`、試験データの出典は `docs/TRIAL_DATA.md`。
+
+## v0.27 リニューアル（2026-11-12）
+
+- 下部タブはHOME／LIVE／ANALYSIS。LIVEの初期表示はMY LIVEで、ALL LIVEへ切替。設定はヘッダー右上。
+- MY LIVE STATSは年／月・都道府県・会場・ツアーの参戦公演統計。セトリ未登録でも参戦数に含む。
+- ANALYSISのSONG ARCHIVEは選択した参戦公演／全公演の披露履歴・曲順・FULL／SHORT・年別・ツアー別分析。セトリ未登録公演は披露率の分母から除外。
+- BE:LIVEロゴは承認済み画像に基づく軽量ベクター、Outfit×Zen Kaku Gothic New、White Aqua Glass。
+- 登録済み公演の詳細編集と新規登録を分離し、曲の追加はエディタ下部1か所から位置指定。CSV書出しも提供。
+- GitHub ActionsでビルドとVitestを実行。mainへの反映後にViteビルドのappフォルダを自動更新する。既存のFirebase/GAS/Firestoreの設定・保存データを変更しない。
+- 初期全歴代公演・未確認セトリの投入、実Firebase/iPhoneでの操作確認、後段PREDICTは別途必要。推測による公演・セトリの自動補完は行わない。
