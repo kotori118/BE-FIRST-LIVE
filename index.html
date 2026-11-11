@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3fcfb"><title>BE:FIRST LIVE ARCHIVE | Googleログインテスト</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 95% 0,#ccefeb,transparent 48%),#f3fcfb;color:#17353a;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;min-height:100vh}
+main{padding:calc(30px + env(safe-area-inset-top)) 18px 30px;max-width:560px;margin:auto}small{color:#047b87;font-weight:750;letter-spacing:.16em}h1{font-size:26px;margin:13px 0}h2{font-size:19px;margin:0 0 12px}
+p{font-size:14px;color:#557378;line-height:1.8}.panel{margin:18px 0;padding:22px 18px;border:1px solid #d2e9e7;border-radius:22px;background:#ffffffed;box-shadow:0 12px 33px #0a828011}
+textarea{width:100%;min-height:160px;font:13px/1.7 ui-monospace,monospace;border:1px solid #bddbd9;border-radius:12px;padding:12px;resize:vertical}
+button{width:100%;background:#079da7;color:#fff;border:0;border-radius:13px;font-size:15px;font-weight:750;padding:14px;margin-top:12px}
+button.secondary{background:#e4f5f3;color:#087987}button:disabled{opacity:.5}.hide{display:none}
+#status{white-space:pre-wrap;word-break:break-word}.uid{padding:12px;background:#eaf7f6;border-radius:10px;font:12px/1.6 ui-monospace,monospace;word-break:break-all;user-select:all}
+footer{color:#738c90;text-align:center;font-size:12px;margin:26px auto}
+</style>
+</head>
+<body><main>
+<small>BE:FIRST LIVE ARCHIVE</small>
+<h1>Firebase 接続テスト</h1>
+<p>Googleログインと本人のUIDを確認するための仮ページ。ライブ履歴やセトリのデータは読み書きしないよ。</p>
+<section class="panel" id="setup"><h2>① 接続情報を設定</h2>
+<p>Firebase Console → プロジェクトの設定 → マイアプリ → Config に表示された <code>const firebaseConfig = { ... }</code> をコピーして貼り付けてね。パスワードや秘密鍵は貼らないでね。</p>
+<textarea id="config" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  appId: &quot;...&quot;&#10;};"></textarea>
+<button id="connect">設定して進む</button><p>設定値はこの端末のブラウザ内だけに保存。GitHubのソースコードには書き込まれないよ。</p>
+</section>
+<section class="panel hide" id="loginPanel"><h2>② Googleログイン</h2>
+<p id="project"></p><button id="login">Googleアカウントでログイン</button>
+<div class="hide" id="signedin"><p>ログイン成功！本人のFirebase UID：</p><div id="uid" class="uid"></div><button class="secondary" id="copy">UIDをコピー</button><button class="secondary" id="logout">ログアウト</button></div>
+<button class="secondary" id="reset">接続設定を入れ直す</button>
+</section>
+<p id="status" role="status" aria-live="polite"></p>
+<footer>テスト専用・Firestoreの読み書きは行いません</footer>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+const $=id=>document.getElementById(id);
+const show=(id,on)=>$(id).classList.toggle("hide",!on);
+let auth;
+function parseConfig(text){
+ const cfg={},re=/([A-Za-z][\w]*)\s*:\s*["']([^"']+)["']/g;let m;
+ while((m=re.exec(text)))cfg[m[1]]=m[2];
+ for(const k of ["apiKey","authDomain","projectId","appId"])if(!cfg[k])throw new Error(k+" が見つからないよ。Config全体をコピーしてね。");
+ return cfg;
+}
+function start(cfg){
+ auth=getAuth(initializeApp(cfg));
+ $("project").textContent="接続先："+cfg.projectId;
+ show("setup",false);show("loginPanel",true);
+ onAuthStateChanged(auth,user=>{
+  show("signedin",!!user);$("login").disabled=!!user;$("uid").textContent=user?.uid||"";
+  if(user)$("status").textContent="Googleログイン成功！";
+ },e=>$("status").textContent=e.code+"： "+e.message);
+}
+$("connect").onclick=()=>{try{const cfg=parseConfig($("config").value);localStorage.setItem("liveArchiveFirebaseConfig",JSON.stringify(cfg));$("status").textContent="";start(cfg)}catch(e){$("status").textContent=e.message}};
+$("login").onclick=()=>{
+ $("status").textContent="ログイン画面を開くよ…";
+ signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>{
+  $("status").textContent=e.code==="auth/unauthorized-domain"
+  ?"Firebase Console → Authentication → 設定 → 承認済みドメイン に kotori118.github.io を追加してね。"
+  :e.code==="auth/popup-blocked"
+  ?"Safariのポップアップがブロックされたみたい。Safari本体で開き、もう一度試してね。"
+  :e.code+"： "+e.message;
+ });
+};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText($("uid").textContent);$("copy").textContent="コピーしたよ ✓"}catch{$("copy").textContent="UIDを長押しでコピーしてね"}};
+$("logout").onclick=()=>signOut(auth);
+$("reset").onclick=()=>{localStorage.removeItem("liveArchiveFirebaseConfig");location.reload()};
+try{const cfg=JSON.parse(localStorage.getItem("liveArchiveFirebaseConfig")||"null");if(cfg)start(cfg)}catch{localStorage.removeItem("liveArchiveFirebaseConfig")}
+</script></main></body></html>
