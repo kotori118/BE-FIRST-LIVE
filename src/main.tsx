@@ -13,6 +13,11 @@ import {
   Download,
   Upload,
   RefreshCw,
+  RotateCcw,
+  Link2,
+  Scissors,
+  Sparkles,
+  CircleHelp,
   Pencil,
   X,
 } from "lucide-react";
@@ -835,6 +840,13 @@ function App() {
             </section>
             <section className="card setlist-compact">
               <h2>セットリスト</h2>
+              {show.hasSavedSetlist && (
+                <div className="setlist-legend" aria-label="セトリ記号の説明">
+                  <span><RotateCcw size={13} aria-hidden="true" /> アンコール</span>
+                  <span><Link2 size={13} aria-hidden="true" /> メドレー</span>
+                  <span><Scissors size={13} aria-hidden="true" /> SHORT</span>
+                </div>
+              )}
               {!show.hasSavedSetlist ? (
                 <p className="empty">セトリ未登録</p>
               ) : (
@@ -843,22 +855,41 @@ function App() {
                     <span className="order">
                       {String(i + 1).padStart(2, "0")}
                     </span>
-                    <div>
+                    <div className="track-content">
                       <strong>{title(entry.songRef)}</strong>
-                      <div className="badges">
-                        <span>
-                          {entry.section === "ENCORE" ? "アンコール" : "本編"}
-                        </span>
-                        <span>{entry.version ?? "—"}</span>
-                        {entry.medleyGroup && <span>メドレー</span>}
+                      <span className="track-flags">
+                        {entry.section === "ENCORE" && (
+                          <span className="track-flag" role="img" aria-label="アンコール" title="アンコール">
+                            <RotateCcw size={15} aria-hidden="true" />
+                          </span>
+                        )}
+                        {entry.medleyGroup && (
+                          <span className="track-flag" role="img" aria-label="メドレー" title="メドレー">
+                            <Link2 size={15} aria-hidden="true" />
+                          </span>
+                        )}
+                        {entry.version === "SHORT" && (
+                          <span className="track-flag" role="img" aria-label="SHORT" title="SHORT">
+                            <Scissors size={15} aria-hidden="true" />
+                          </span>
+                        )}
+                        {entry.version === null && (
+                          <span className="track-flag" role="img" aria-label="披露バージョン未設定" title="披露バージョン未設定">
+                            <CircleHelp size={15} aria-hidden="true" />
+                          </span>
+                        )}
                         {data.entryFacts.some(
                           (f) =>
                             f.showId === show.id &&
                             f.entryKey === entry.id &&
                             f.unpublishedBeforeShow &&
                             f.firstPerformedAtShow,
-                        ) && <span>未発表新曲 初披露</span>}
-                      </div>
+                        ) && (
+                          <span className="track-flag track-flag-debut" role="img" aria-label="未発表新曲の初披露" title="未発表新曲の初披露">
+                            <Sparkles size={15} aria-hidden="true" />
+                          </span>
+                        )}
+                      </span>
                     </div>
                     {data.songMetadata.find((m) => m.songRef === entry.songRef)
                       ?.appleMusicUrl && (
