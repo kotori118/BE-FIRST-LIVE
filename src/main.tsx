@@ -833,7 +833,7 @@ function App() {
                 </button>
               </div>
             </section>
-            <section className="card">
+            <section className="card setlist-compact">
               <h2>セットリスト</h2>
               {!show.hasSavedSetlist ? (
                 <p className="empty">セトリ未登録</p>
