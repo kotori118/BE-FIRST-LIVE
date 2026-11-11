@@ -37,12 +37,23 @@ test('client timestamps and extra personal fields are rejected', async () => {
   await assertFails(setDoc(ref, { ...sample(), seat: 'not-allowed' }));
   await assertFails(setDoc(ref, { message: 'not-allowed', checkedAt: serverTimestamp() }));
 });
-test('all live, song and other diagnostic paths stay closed, even to owner', async () => {
+test('live and other diagnostic paths stay closed, even to owner', async () => {
   const db = ownerDb();
-  for (const path of ['diagnostics/other', 'datasets/test', 'universeSongs/test', 'appMeta/active']) {
+  for (const path of ['diagnostics/other', 'datasets/test', 'appMeta/active']) {
     await assertFails(getDoc(doc(db, path))); await assertFails(setDoc(doc(db, path), sample()));
   }
   await assertFails(getDocs(collection(db, 'diagnostics')));
+});
+test('catalog and sync status are read-only for owner and hidden from everyone else', async () => {
+  const owner = ownerDb(), guest = env.unauthenticatedContext().firestore();
+  for (const path of ['universeSongs/test', 'syncStatus/current']) {
+    await assertSucceeds(getDoc(doc(owner, path)));
+    await assertFails(setDoc(doc(owner, path), sample()));
+    await assertFails(getDoc(doc(guest, path)));
+  }
+  await assertSucceeds(getDocs(collection(owner, 'universeSongs')));
+  const other = env.authenticatedContext('other-google', { firebase: { sign_in_provider: 'google.com' } }).firestore();
+  await assertFails(getDocs(collection(other, 'universeSongs')));
 });
 test('owner can delete the disposable connection test record', async () => {
   await assertSucceeds(deleteDoc(doc(ownerDb(), PATH)));

@@ -38,13 +38,25 @@ footer{color:#738c90;text-align:center;font-size:12px;margin:26px auto}
 <button id="saveTest" disabled>テストデータ1件を保存</button>
 <button class="secondary" id="readTest" disabled>サーバーから読み直す</button>
 <button class="secondary" id="denyTest" disabled>未ログインのアクセス拒否を確認</button>
+<button class="secondary" id="readCatalog" disabled>同期済みの楽曲を確認</button>
 <p id="firestoreNetwork" role="status"></p>
 <p id="firestoreStatus" role="status" aria-live="polite" style="white-space:pre-wrap;word-break:break-word"></p>
+</section>
+<section class="panel hide" id="gasPanel">
+<h2>④ Universeの楽曲同期</h2>
+<p>既存Universeとは別の、新しいApps Scriptを使うよ。最初は接続確認だけを実行してね。</p>
+<button class="secondary" id="copyGas">GASコードをコピー</button>
+<details id="gasDetails"><summary>GASコードを見る</summary><textarea id="gasText" readonly spellcheck="false" aria-label="Universe同期GASコード"></textarea></details>
+<button class="secondary" id="copyManifest">GASの権限設定をコピー</button>
+<details id="manifestDetails"><summary>権限設定を見る</summary><textarea id="manifestText" readonly spellcheck="false" aria-label="Apps Script権限設定"></textarea></details>
+<p>新しいApps ScriptのCode.gsへGASコードを貼り付け、プロジェクトの設定からappsscript.jsonを表示して、権限設定を貼り付ける。</p>
+<p>保存後、上部の関数選択で <code>checkLiveConnection</code> を選んで実行してね。Universeを読み取り、Firestoreへ接続確認用の1件だけ保存する。楽曲や公演の一括登録はまだ行わないよ。</p>
+<p><a href="./docs/GAS_SETUP.html" target="_blank" rel="noopener">詳しい手順を見る</a></p>
 </section>
 <p id="status" role="status" aria-live="polite"></p>
 <footer>テスト専用・公演／セトリ／参戦履歴は読み書きしません</footer>
 <script type="module">
-import { connectFirestoreTest, updateFirestoreUser } from "./firestore-test.js";
+import { connectFirestoreTest, updateFirestoreUser } from "./firestore-test.js?v=20261111-song-sync-1";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 const $=id=>document.getElementById(id);

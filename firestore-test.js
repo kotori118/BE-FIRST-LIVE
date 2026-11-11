@@ -2,7 +2,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import {
   initializeFirestore, memoryLocalCache, doc, getDocFromServer,
-  runTransaction, serverTimestamp
+  runTransaction, serverTimestamp, collection, query, limit, getDocsFromServer
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const OWNER_UID = "xBt1XGXQjUg0UI9opk18Y76bucQ2";
@@ -14,8 +14,8 @@ const $ = id => document.getElementById(id);
 function status(text) { $("firestoreStatus").textContent = text; }
 function controls() {
   const loggedIn = Boolean(auth?.currentUser);
-  for (const id of ["saveTest", "readTest", "denyTest"])
-    $(id).disabled = !loggedIn || busy || !navigator.onLine;
+  for (const id of ["saveTest", "readTest", "denyTest", "readCatalog"])
+    if ($(id)) $(id).disabled = !loggedIn || busy || !navigator.onLine;
   $("firestoreNetwork").textContent = navigator.onLine ? "" : "インターネットに接続してください。";
   // Avoid changing accounts while an acknowledged server operation is running.
   for (const id of ["logout", "reset"]) $(id).disabled = busy;
@@ -29,6 +29,7 @@ export function connectFirestoreTest(firebaseApp, firebaseAuth) {
 export function updateFirestoreUser(user) {
   generation++;
   $("firestorePanel").classList.toggle("hide", !user);
+  $("gasPanel")?.classList.toggle("hide", !user);
   $("ownerStatus").textContent = !user ? "" : user.uid === OWNER_UID
     ? "設定した本人UIDと一致しています。"
     : "本人UIDと異なるアカウントです。データへのアクセスは拒否されます。";
@@ -102,16 +103,34 @@ $("denyTest").onclick = () => run(async () => {
     await deleteApp(guestApp);
   }
 });
-$("copyRules").onclick = async () => {
+async function copyTextFile(buttonId, path, detailsId, textId) {
   try {
-    const response = await fetch("./firestore.rules", { cache: "no-store" });
-    if (!response.ok) throw new Error("ルールファイルを取得できませんでした。");
-    const rules = await response.text();
-    $("rulesText").value = rules;
-    $("rulesDetails").open = true;
-    try { await navigator.clipboard.writeText(rules); $("copyRules").textContent = "コピーしたよ ✓"; }
-    catch { $("copyRules").textContent = "下のルールを長押ししてコピーしてね"; }
+    const response = await fetch(path, { cache: "no-store" });
+    if (!response.ok) throw new Error("設定ファイルを取得できませんでした。");
+    const text = await response.text();
+    $(textId).value = text;
+    $(detailsId).open = true;
+    try { await navigator.clipboard.writeText(text); $(buttonId).textContent = "コピーしたよ ✓"; }
+    catch { $(buttonId).textContent = "下の内容を長押ししてコピーしてね"; }
   } catch (error) { status(error.message); }
-};
+}
+$("copyRules").onclick = () => copyTextFile("copyRules", "./firestore.rules", "rulesDetails", "rulesText");
+if ($("copyGas")) $("copyGas").onclick = () => copyTextFile("copyGas", "./gas/UniverseSync.gs", "gasDetails", "gasText");
+if ($("copyManifest")) $("copyManifest").onclick = () => copyTextFile("copyManifest", "./gas/appsscript.json", "manifestDetails", "manifestText");
+if ($("readCatalog")) $("readCatalog").onclick = () => run(async () => {
+  const ref = doc(db, "syncStatus/current");
+  const before = await getDocFromServer(ref);
+  if (!before.exists()) return "楽曲同期はまだ実行されていません。先にGASの接続確認を行ってください。";
+  const songs = await getDocsFromServer(query(collection(db, "universeSongs"), limit(1001)));
+  const after = await getDocFromServer(ref);
+  if (!after.exists() || before.data().attemptId !== after.data().attemptId)
+    return "楽曲を同期中です。もう一度「同期済みの楽曲を確認」を押してください。";
+  if (songs.size > 1000) throw new Error("確認画面の取得上限を超えました。");
+  const active = songs.docs.map(d => d.data()).filter(s => s.available !== false);
+  const info = after.data();
+  const last = info.lastSuccessAt?.toDate?.().toLocaleString("ja-JP") ?? "まだありません";
+  return `同期済み：${active.length}曲（BE:FIRST ${active.filter(s => s.artist === "BE:FIRST").length}曲）\n最終成功：${last}\n` +
+    (info.state === "ERROR" ? "最新の同期は失敗。前回の正常データを保持しています。" : "GASが最後に取得したデータです。起動時にSheetsへ直接同期する方式ではありません。");
+});
 window.addEventListener("online", controls);
 window.addEventListener("offline", controls);

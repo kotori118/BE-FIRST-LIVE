@@ -18,6 +18,15 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // GAS writes with Google OAuth + IAM. Client apps cannot modify the catalog.
+    match /universeSongs/{songId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+    match /syncStatus/current {
+      allow get: if isOwner();
+      allow write: if false;
+    }
     match /{document=**} {
       allow read, write: if false;
     }
