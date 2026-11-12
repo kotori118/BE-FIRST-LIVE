@@ -9,6 +9,10 @@ export const entrySchema = z.strictObject({
   songRef,
   section: z.enum(["MAIN", "ENCORE"]),
   version: z.enum(["FULL", "SHORT"]).nullable(),
+  // Default values keep older saved setlists and backups readable.
+  arrangement: z.enum(["NORMAL", "ARRANGED"]).default("NORMAL"),
+  countsAsPerformance: z.boolean().default(true),
+  note: z.string().max(4000).default(""),
   medleyGroup: id.nullable(),
   performance: z.enum(["ORIGINAL", "COVER", "SOLO", "UNIT", "OTHER"]),
   members: z.array(z.string()).max(30),
