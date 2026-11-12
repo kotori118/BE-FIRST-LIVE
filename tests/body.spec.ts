@@ -186,6 +186,32 @@ describe("v0.24 setlists and analytics", () => {
   });
 });
 describe("explicit catalog merge candidates", () => {
+  it("normalizes whitespace and case and resolves only verified featured-title aliases", () => {
+    const songs = [
+      { ...trialSongs[0], ref: "U:1020", title: "Smile again", artist: "BE:FIRST", available: true },
+      { ...trialSongs[0], ref: "U:1054", title: "BRUCE WAYNE feat. Flo Milli, ATL Jacob", artist: "BE:FIRST", available: true },
+      { ...trialSongs[0], ref: "U:1057", title: "WATCH ME feat. BIA", artist: "BE:FIRST", available: true },
+      { ...trialSongs[0], ref: "U:5002", title: "New Chapter", artist: "UNIT", available: true },
+    ];
+    const locals = [
+      { id: "smile", title: " Ｓｍｉｌｅ　Ａｇａｉｎ " },
+      { id: "bruce", title: "BRUCE WAYNE" },
+      { id: "watch", title: "WATCH ME" },
+      { id: "chapter", title: "New Chapter" },
+    ];
+    expect(mergeCandidates(locals, songs).map(x => [x.localRef, x.universeRef])).toEqual([
+      ["L:smile", "U:1020"], ["L:bruce", "U:1054"], ["L:watch", "U:1057"],
+    ]);
+  });
+  it("never offers same-title UNIT tracks or unrelated solo artists", () => {
+    const songs = [
+      { ...trialSongs[0], ref: "U:5002", title: "New Chapter", artist: "UNIT", available: true },
+      { ...trialSongs[0], ref: "U:9991", title: "Want it", artist: "OTHER", available: true },
+      { ...trialSongs[0], ref: "U:9992", title: "Want it", artist: "SHUNTO", available: true },
+    ];
+    expect(mergeCandidates([{ id: "a", title: "New Chapter" }, { id: "b", title: "Want it" }], songs))
+      .toEqual([{ localRef: "L:b", universeRef: "U:9992", title: "Want it" }]);
+  });
   it("offers same-title candidates without changing either source", () => {
     const songs = [{ ...trialSongs[0], title: "Title" }];
     const locals = [{ id: "local", title: "Title" }];
