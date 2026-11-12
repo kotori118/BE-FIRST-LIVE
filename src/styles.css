@@ -955,3 +955,21 @@ button.upcoming-show-button:last-child { border-bottom:0; }
 .upcoming-show-button strong { text-align:left; font-family:inherit; font-size:13px; font-weight:600; }
 .upcoming-show-button small { margin:0; font-size:12px; line-height:1.5; }
 .upcoming-show-button .aqua { white-space:nowrap; font-size:12px; }
+
+/* Collapsed setlist differences: one pattern represents any number of shows. */
+.setlist-diffs > summary { font-size:16px; font-weight:600; cursor:pointer; }
+.setlist-diffs > .muted { margin:12px 0 16px; }
+.setlist-diff-group { padding:15px 0; border-top:1px solid var(--line); }
+.setlist-diff-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:14px; margin-bottom:9px; }
+.setlist-diff-heading > span { color:var(--muted); font-size:12px; white-space:nowrap; }
+.setlist-diff-side { display:grid; gap:6px; margin:9px 0; }
+.setlist-diff-side > span { color:var(--muted); font-size:12px; }
+.setlist-diff-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.setlist-diff-chips > span { border-radius:6px; background:#eff7f7; padding:5px 9px; font-size:13px; color:#20545a; overflow-wrap:anywhere; }
+.setlist-diff-dates { margin-top:12px; border-radius:10px; background:#f7faf9; padding:10px 12px; }
+.setlist-diff-dates > summary { color:#286973; cursor:pointer; font-size:13px; }
+.setlist-diff-dates > div { margin-top:7px; }
+.setlist-diff-date { display:flex; justify-content:space-between; gap:12px; width:100%; padding:9px 0; border:0; border-bottom:1px solid var(--line); background:transparent; font-size:12px; color:#2b4c51; text-align:left; }
+.setlist-diff-date > span:first-child { min-width:0; overflow-wrap:anywhere; }
+.setlist-diff-date > span:last-child { color:#1d8390; white-space:nowrap; }
+.setlist-diff-date:last-child { border-bottom:0; }
