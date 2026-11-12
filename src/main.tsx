@@ -53,7 +53,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, rareSongRanking, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -93,6 +93,7 @@ function App() {
     [venuesExpanded, setVenuesExpanded] = useState(false),
     [toursExpanded, setToursExpanded] = useState(false),
     [songDetail, setSongDetail] = useState<string | null>(null),
+    [rareOpen, setRareOpen] = useState(false),
     [attendanceEdit, setAttendanceEdit] = useState<{showId:string;attended:boolean;seat:string;note:string} | null>(null),
     [expanded, setExpanded] = useState<string | null>(
       sessionStorage.getItem("lastTour"),
@@ -240,6 +241,7 @@ function App() {
     setLibraryDirty(false);
     setShowId(null);
     setSongDetail(null);
+    setRareOpen(false);
     setTab(next);
   };
   const refresh = async () => {
@@ -498,6 +500,7 @@ function App() {
                 s.songRef.startsWith("U:") &&
                 !data.songMetadata.some((m) => m.songRef === s.songRef)))),
     ),
+    rareStats = rareSongRanking(stats),
     searchShows = data.shows.filter((s) =>
       [
         s.date,
@@ -1269,7 +1272,11 @@ function App() {
             )}
             {tab === "ANALYSIS" && (
               <>
-                <div className="page-title"><h1>{songDetail ? "SONG ARCHIVE" : "ANALYSIS"}</h1>{songDetail && <button className="subtle-button" onClick={() => setSongDetail(null)}>ランキングへ</button>}</div>
+                <div className="page-title">
+                  <h1>{songDetail ? "SONG ARCHIVE" : rareOpen ? "レア曲分析" : "ANALYSIS"}</h1>
+                  {songDetail ? <button className="subtle-button" onClick={() => setSongDetail(null)}>{rareOpen ? "レア曲分析へ" : "ランキングへ"}</button>
+                    : rareOpen ? <button className="subtle-button" onClick={() => setRareOpen(false)}>ランキングへ</button> : null}
+                </div>
                 <div className="segmented">
                   <button className={scope === "mine" ? "selected" : ""} onClick={() => setScope("mine")}>参戦公演</button>
                   <button className={scope === "all" ? "selected" : ""} onClick={() => setScope("all")}>全公演</button>
@@ -1301,15 +1308,27 @@ function App() {
                     <section className="card"><h2>披露された公演</h2>{[...detail.history].reverse().map((h,i) => <button className="history-row" key={h.show.id+":"+h.entry.id+":"+i} onClick={() => openShow(h.show)}><span><strong>{h.show.date} · {h.show.venue}</strong><small>{data.tours.find(t => t.id === h.show.tourId)?.name ?? h.show.name}</small></span><span>{h.order}/{h.total}曲目 · {h.entry.version ?? "—"}{h.entry.section === "ENCORE" ? " · アンコール" : ""}</span></button>)}{!detail.history.length && <p className="empty">対象範囲に披露記録がありません</p>}</section>
                   </>;
                 })() : <>
-                  <section className="card ranking">
+                  {!rareOpen && <section className="card ranking">
                     <h2>楽曲ランキング</h2>
                     {stats.map((song,i) => <button className="rank-row rank-button" key={song.songRef} onClick={() => setSongDetail(song.songRef)}>
                       <span className="order">{String(i+1).padStart(2,"0")}</span><div><strong>{title(song.songRef)}</strong><small>披露 {song.performances}回 · FULL {song.full} / SHORT {song.short}</small></div><strong className="aqua">{song.shows}<small>公演</small></strong>
                     </button>)}
                     {!stats.length && <p className="empty">集計できるセトリがありません</p>}
+                  </section>}
+                  <section className="card">
+                    <div className="page-title">
+                      <h2>レア曲分析</h2>
+                      {!rareOpen && rareStats.length > 5 && <button className="subtle-button" onClick={() => setRareOpen(true)}>すべて見る（{rareStats.length}曲） →</button>}
+                    </div>
+                    <p className="muted">選択した公演のうち、セトリ登録済みの公演を対象に算出。実際に披露された曲だけを表示。</p>
+                    {rareStats.slice(0, rareOpen ? rareStats.length : 5).map(song =>
+                      <button className="rare rare-button" key={song.songRef} onClick={() => setSongDetail(song.songRef)}>
+                        <span>{title(song.songRef)}</span><strong>{(song.rate! * 100).toFixed(1)}%</strong>
+                      </button>
+                    )}
+                    {!rareStats.length && <p className="empty">対象範囲に披露記録がありません</p>}
                   </section>
-                  <section className="card"><h2>レア曲分析</h2>{[...stats].filter(song=>song.rate!==null).sort((a,b)=>(a.rate??0)-(b.rate??0)).map(song=><button className="rare rare-button" key={song.songRef} onClick={()=>setSongDetail(song.songRef)}><span>{title(song.songRef)}</span><strong>{song.rate===null?"—":(song.rate*100).toFixed(1)+"%"}</strong></button>)}{!stats.length&&<p className="empty">—</p>}</section>
-                  <details className="card"><summary>まだ聴いていない曲（{missing.length}曲）</summary><p className="muted">UniverseのBE:FIRST楽曲・登録済みセトリの範囲</p>{missing.map(song => <div className="stats-row" key={song.ref}>{song.title}</div>)}</details>
+                  {!rareOpen && <details className="card"><summary>まだ聴いていない曲（{missing.length}曲）</summary><p className="muted">UniverseのBE:FIRST楽曲・登録済みセトリの範囲</p>{missing.map(song => <div className="stats-row" key={song.ref}>{song.title}</div>)}</details>}
                 </>}
               </>
             )}
