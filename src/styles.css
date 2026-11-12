@@ -997,6 +997,6 @@ button.upcoming-show-button:last-child { border-bottom:0; }
 .setlist-compare-position { font-family:Outfit,sans-serif; color:#268a95; font-weight:600; }
 .setlist-compare-track small { grid-column:2; color:var(--muted); font-size:10px; }
 .setlist-compare-note { margin-top:14px; font-size:11px; }
-@media (max-width:390px) {
+@media (max-width:640px) {
   .setlist-compare-lists { grid-template-columns:minmax(0,1fr); gap:18px; }
 }
