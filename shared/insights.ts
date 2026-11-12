@@ -1,4 +1,4 @@
-import { effectiveEntries, isCountedPerformance } from "./domain";
+import { effectiveEntries, isCountedPerformance, compareSetlistSongs } from "./domain";
 import type { Dataset, Show } from "./model";
 
 const prefectures = "北海道 青森 岩手 宮城 秋田 山形 福島 茨城 栃木 群馬 埼玉 千葉 東京 神奈川 新潟 富山 石川 福井 山梨 長野 岐阜 静岡 愛知 三重 滋賀 京都 大阪 兵庫 奈良 和歌山 鳥取 島根 岡山 広島 山口 徳島 香川 愛媛 高知 福岡 佐賀 長崎 熊本 大分 宮崎 鹿児島 沖縄".split(" ");
@@ -135,6 +135,38 @@ export function allLiveTimeline(data: Dataset, visibleShows: readonly Show[]) {
   }
   for (const show of singles) sections.push({kind:"single",key:"show:"+show.id,date:show.date,show});
   return sections.sort((a,b)=>b.date.localeCompare(a.date)||a.key.localeCompare(b.key));
+}
+
+/** Group tour setlist differences by the actual *song set* change.
+ * One difference pattern may apply to dozens of shows. No changes are written.
+ * Missing setlists and non-performance game corners are excluded.
+ */
+export function groupedTourSetlistDifferences(data: Dataset, target: Show) {
+  if (!target.tourId || !target.hasSavedSetlist) return [];
+  const current = effectiveEntries(data,target);
+  if (current === null) return [];
+  const groups = new Map<string, {
+    currentOnly: string[]; otherOnly: string[]; shows: Show[];
+  }>();
+  for (const other of data.shows) {
+    if (other.id === target.id || other.tourId !== target.tourId || !other.hasSavedSetlist) continue;
+    const otherEntries = effectiveEntries(data,other);
+    if (otherEntries === null) continue;
+    const differences = compareSetlistSongs(current,otherEntries);
+    if (!differences.currentOnly.length && !differences.otherOnly.length) continue;
+    const key = JSON.stringify([ [...differences.currentOnly].sort(), [...differences.otherOnly].sort() ]);
+    const existing = groups.get(key);
+    if (existing) existing.shows.push(other);
+    else groups.set(key,{
+      currentOnly:differences.currentOnly,
+      otherOnly:differences.otherOnly,
+      shows:[other],
+    });
+  }
+  return [...groups.values()]
+    .map(group=>({...group,shows:group.shows.sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id))}))
+    .sort((a,b)=>b.shows.length-a.shows.length ||
+      (b.shows[0]?.date ?? "").localeCompare(a.shows[0]?.date ?? ""));
 }
 
 /** Date-only BE:LIVE shows are scheduled in Japan; compare by Japan's calendar date. */
