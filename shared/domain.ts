@@ -278,6 +278,28 @@ export function initialImportPreflight(currentInput: Dataset, incomingInput: Dat
       entityIdConflicts.length > 0 || matchingLocalSongs.length > 0 || matchingTours.length > 0,
   };
 }
+/** Initial historical import is allowed only into a completely empty LIVE dataset.
+ * This guard is deliberately stricter than backup restore: it never merges or replaces
+ * user-edited tours, setlists, local songs or attendance.
+ */
+export function validateFreshInitialArchive(current: Dataset, incoming: Dataset, songs: Song[]) {
+  const existing = validateDataset(current);
+  const source = validateDataset(incoming);
+  if (collections.some(c => existing[c].length > 0))
+    throw new Error("現在のLIVEデータは空ではありません。初期一括登録を中止しました");
+  if (source.attendance.length > 0)
+    throw new Error("初期データに参戦記録を含めることはできません");
+  if (!source.shows.length)
+    throw new Error("初期登録する公演がありません");
+  if (!songs.length)
+    throw new Error("Universeの楽曲一覧を確認できないため、初期登録を中止しました");
+  const report = initialImportPreflight(existing, source, songs);
+  if (report.requiresManualReconciliation || report.showOverlaps.length || report.unsafeShowIds.length)
+    throw new Error("重複または衝突が見つかったため、初期登録を中止しました");
+  if (report.unresolvedUniverseRefs.length)
+    throw new Error("同期済みの楽曲一覧にないSongIDがあります: " + report.unresolvedUniverseRefs.join("、"));
+  return report;
+}
 export function templateImpact(
   data: Dataset,
   template: Dataset["templates"][number],
