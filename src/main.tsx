@@ -884,7 +884,7 @@ function App() {
               </p>
               <div className="actions">
                 <CheckIn s={show} />
-                <button className="subtle-button" disabled={busy || !online} aria-expanded={attendanceEdit?.showId === show.id} aria-controls="attendance-entry-form" onClick={() => startAttendance(show)}><Ticket size={16} /> {mine.some((m) => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</button>
+                <button className="subtle-button" disabled={busy || !online} aria-expanded={attendanceEdit?.showId === show.id} aria-controls="attendance-entry-form" onClick={() => startAttendance(show)}><Ticket size={16} /> {registered.some((m) => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</button>
                 <button className="subtle-button"
                   disabled={busy || !online}
                   onClick={() => startEdit(show)}
@@ -896,7 +896,7 @@ function App() {
             </section>
             {attendanceEdit?.showId === show.id && (
               <section id="attendance-entry-form" ref={attendanceEditorRef} className="card fields attendance-editor" aria-label="参戦記録の入力">
-                <h2>{mine.some(m => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</h2>
+                <h2>{registered.some(m => m.id === show.id) ? "参戦記録を編集" : "参戦を記録"}</h2>
                 <label className="inline-check"><input type="checkbox" checked={attendanceEdit.attended} onChange={(e) => setAttendanceEdit({...attendanceEdit, attended:e.target.checked})}/> このライブに参戦した</label>
                 <label>座席（任意）<input value={attendanceEdit.seat} onChange={(e) => setAttendanceEdit({...attendanceEdit, seat:e.target.value})}/></label>
                 <label>感想（任意）<textarea value={attendanceEdit.note} onChange={(e) => setAttendanceEdit({...attendanceEdit, note:e.target.value})}/></label>
@@ -1132,11 +1132,11 @@ function App() {
                     <section className="card">
                       <h2>初めて生で聴いた曲 <small>{firstHeard.length}曲</small></h2>
                       <p className="muted">参戦済み公演の登録済みセトリから、初めて登場した日を集計。BE:FIRSTとしての初披露とは別の指標です。</p>
-                      {firstHeard.slice(0,5).map(item=><button className="stats-row upcoming-show-button" key={item.songRef} onClick={()=>{setSongDetail(item.songRef);navigate("ANALYSIS");}}>
+                      {firstHeard.slice(0,5).map(item=><button className="stats-row upcoming-show-button" key={item.songRef} onClick={()=>{navigate("ANALYSIS");setSongDetail(item.songRef);}}>
                         <span><strong>{title(item.songRef)}</strong><small>{item.date} · {item.venue}</small></span><span className="aqua">詳細 →</span>
                       </button>)}
                       {firstHeard.length>5 && <details><summary>すべて見る（{firstHeard.length}曲）</summary>
-                        {firstHeard.slice(5).map(item=><button className="stats-row upcoming-show-button" key={item.songRef} onClick={()=>{setSongDetail(item.songRef);navigate("ANALYSIS");}}>
+                        {firstHeard.slice(5).map(item=><button className="stats-row upcoming-show-button" key={item.songRef} onClick={()=>{navigate("ANALYSIS");setSongDetail(item.songRef);}}>
                           <span><strong>{title(item.songRef)}</strong><small>{item.date} · {item.venue}</small></span><span className="aqua">詳細 →</span>
                         </button>)}
                       </details>}
@@ -1145,11 +1145,11 @@ function App() {
                     <section className="card">
                       <h2>自分が聴いたレア曲</h2>
                       <p className="muted">参戦済み・セトリ登録済み公演の披露率が低い順。未来の参戦予定は含みません。</p>
-                      {myRare.slice(0,5).map(song=><button className="rare rare-button" key={song.songRef} onClick={()=>{setSongDetail(song.songRef);navigate("ANALYSIS");}}>
+                      {myRare.slice(0,5).map(song=><button className="rare rare-button" key={song.songRef} onClick={()=>{navigate("ANALYSIS");setSongDetail(song.songRef);}}>
                         <span>{title(song.songRef)}</span><strong>{(song.rate!*100).toFixed(1)}%</strong>
                       </button>)}
                       {!myRare.length && <p className="muted">集計できるセトリがありません。</p>}
-                      {myRare.length>5 && <button className="subtle-button" onClick={()=>{setScope("mine");setRareOpen(true);navigate("ANALYSIS");}}>レア曲をもっと見る →</button>}
+                      {myRare.length>5 && <button className="subtle-button" onClick={()=>{navigate("ANALYSIS");setScope("mine");setRareOpen(true);}}>レア曲をもっと見る →</button>}
                     </section>
                     <section className="card live-stats-chart">
                       <h2>参戦の軌跡</h2>
@@ -1394,7 +1394,7 @@ function App() {
                   <p>登録済みのライブから参戦した公演を選んで、一度に保存できます。既存の参戦記録・公演・セトリ・座席・感想は変更しません。</p>
                   <p className="muted">参戦履歴を追加する前の状態をJSONで保存できます。</p>
                   <button disabled={busy} onClick={() => download("be-live-before-attendance.json", exportJson(data))}><Download size={16}/> 登録前のJSONバックアップを保存</button>
-                  <div className="stats-row"><span>現在の参戦登録</span><strong>{mine.length}公演</strong></div>
+                  <div className="stats-row"><span>現在の参戦登録</span><strong>{registered.length}公演（参加済み {mine.length}・予定 {upcoming.length}）</strong></div>
                   <button disabled={busy || !online || preview || bulkCandidates.length === 0} onClick={() => {
                     setBulkAttendanceOpen(!bulkAttendanceOpen);
                     setBulkAttendanceIds([]);
