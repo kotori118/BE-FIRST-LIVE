@@ -1347,7 +1347,8 @@ function App() {
                 <section className="card fields">
                   <h2>参戦履歴の初回一括登録</h2>
                   <p>登録済みのライブから参戦した公演を選んで、一度に保存できます。既存の参戦記録・公演・セトリ・座席・感想は変更しません。</p>
-                  <p className="muted">保存前に下の「バックアップ」からJSONを書き出しておくと安心です。</p>
+                  <p className="muted">参戦履歴を追加する前の状態をJSONで保存できます。</p>
+                  <button disabled={busy} onClick={() => download("be-live-before-attendance.json", exportJson(data))}><Download size={16}/> 登録前のJSONバックアップを保存</button>
                   <div className="stats-row"><span>現在の参戦登録</span><strong>{mine.length}公演</strong></div>
                   <button disabled={busy || !online || preview || bulkCandidates.length === 0} onClick={() => {
                     setBulkAttendanceOpen(!bulkAttendanceOpen);
