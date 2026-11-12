@@ -8,6 +8,22 @@ export function prefecture(region: string): string | null {
   if (!name) return null;
   return name === "北海道" ? name : name + (name === "東京" ? "都" : name === "大阪" || name === "京都" ? "府" : "県");
 }
+/** Compact schematic of Japan. Coordinates are cartogram grid positions, not geographic boundaries. */
+export const JAPAN_PREFECTURE_LAYOUT = [
+  ["北海道",10,1],["青森",9,3],["岩手",9,4],["秋田",8,4],
+  ["宮城",9,5],["山形",8,5],["福島",9,6],
+  ["茨城",10,7],["栃木",9,7],["群馬",8,7],["埼玉",9,8],
+  ["千葉",11,9],["東京",10,9],["神奈川",10,10],
+  ["新潟",7,7],["富山",6,8],["石川",5,8],["福井",5,9],
+  ["山梨",8,9],["長野",7,8],["岐阜",6,9],["静岡",8,10],["愛知",7,10],
+  ["三重",6,11],["滋賀",5,10],["京都",4,10],["大阪",4,11],
+  ["兵庫",3,11],["奈良",5,11],["和歌山",4,12],
+  ["鳥取",2,10],["島根",1,10],["岡山",2,11],["広島",1,11],["山口",1,12],
+  ["徳島",4,13],["香川",3,13],["愛媛",2,13],["高知",3,14],
+  ["福岡",1,14],["佐賀",1,15],["長崎",1,16],["熊本",2,15],
+  ["大分",3,15],["宮崎",3,16],["鹿児島",2,17],["沖縄",1,19],
+] as const;
+
 const group = (values: string[]) => Object.entries(values.reduce<Record<string, number>>((counts, key) => {
   counts[key] = (counts[key] ?? 0) + 1;
   return counts;
@@ -16,10 +32,16 @@ const group = (values: string[]) => Object.entries(values.reduce<Record<string, 
 export function attendanceStats(data: Dataset, mine: Show[], year?: string) {
   const sorted = [...mine].sort((a, b) => a.date.localeCompare(b.date));
   const knownPrefectures = mine.map((s) => prefecture(s.region)).filter((x): x is string => x !== null);
+  const attendedIds = new Set(mine.map(s => s.id));
   const tourStats = data.tours.map((tour) => {
     const registered = data.shows.filter((s) => s.tourId === tour.id && (!year || s.date.startsWith(year + "-")));
-    const attended = registered.filter((s) => mine.some((m) => m.id === s.id)).length;
-    return { id: tour.id, name: tour.name, attended, total: registered.length, rate: registered.length ? attended / registered.length : null };
+    const attended = registered.filter((s) => attendedIds.has(s.id)).length;
+    return {
+      id: tour.id, name: tour.name, attended, total: registered.length,
+      rate: registered.length ? attended / registered.length : null,
+      shows: [...registered].sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+        .map(s => ({id:s.id, date:s.date, venue:s.venue, attended:attendedIds.has(s.id)})),
+    };
   }).filter((t) => t.attended).sort((a, b) => b.attended - a.attended || a.name.localeCompare(b.name, "ja"));
   return {
     total: mine.length,
@@ -40,6 +62,7 @@ export function attendanceStats(data: Dataset, mine: Show[], year?: string) {
     unknownPrefectures: mine.length - knownPrefectures.length,
     venues: group(mine.map((s) => s.venue)),
     tourStats,
+    standaloneCount: mine.filter(s => !s.tourId).length,
   };
 }
 
@@ -50,8 +73,9 @@ export function selectAttendancePeriod(data: Dataset, mine: Show[], requested: s
   const years = [...new Set(mine.map(s => s.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
   const period = requested === "all" ? "all" : requested && years.includes(requested) ? requested : years[0] ?? "all";
   const allStats = attendanceStats(data, mine);
-  const stats = period === "all" ? allStats : attendanceStats(data, mine.filter(s => s.date.startsWith(period + "-")), period);
-  return { years, period, stats, allStats };
+  const shows = period === "all" ? mine : mine.filter(s => s.date.startsWith(period + "-"));
+  const stats = period === "all" ? allStats : attendanceStats(data, shows, period);
+  return { years, period, shows, stats, allStats };
 }
 
 export function songArchive(data: Dataset, shows: Show[], ref: string) {
