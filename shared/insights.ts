@@ -24,6 +24,16 @@ export function attendanceStats(data: Dataset, mine: Show[]) {
   return {
     total: mine.length,
     firstDate: sorted[0]?.date ?? null,
+    lastDate: sorted.at(-1)?.date ?? null,
+    distinctTours: new Set(mine.map(s => s.tourId ?? "single:" + s.id)).size,
+    activeYears: new Set(mine.map(s => s.date.slice(0, 4))).size,
+    timeline: sorted.map(s => ({ id: s.id, date: s.date, venue: s.venue, name: data.tours.find(t => t.id === s.tourId)?.name ?? s.name })),
+    cumulative: sorted.reduce<{ date: string; total: number }[]>((acc, show) => {
+      acc.push({ date: show.date, total: acc.length + 1 });
+      return acc;
+    }, []),
+    peakYear: group(mine.map(s => s.date.slice(0, 4)))[0] ?? null,
+    peakMonth: group(mine.map(s => s.date.slice(0, 7)))[0] ?? null,
     years: group(mine.map((s) => s.date.slice(0, 4))).sort(([a], [b]) => b.localeCompare(a)),
     months: group(mine.map((s) => s.date.slice(0, 7))).sort(([a], [b]) => b.localeCompare(a)),
     prefectures: group(knownPrefectures),
