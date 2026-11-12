@@ -53,7 +53,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, groupedTourSetlistDifferences, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -525,19 +525,8 @@ function App() {
         data.tours.find((t) => t.id === s.tourId)?.name ?? s.name,
       ].some((x) => x.toLowerCase().includes(query.toLowerCase())),
     );
-  const showDifferences = show?.tourId && show.hasSavedSetlist
-    ? (() => {
-        const current = effectiveEntries(data, show);
-        if (!current) return [];
-        return data.shows.flatMap(s => {
-          if (s.id === show.id || s.tourId !== show.tourId || !s.hasSavedSetlist) return [];
-          const other = effectiveEntries(data, s);
-          if (!other) return [];
-          const diff = compareSetlistSongs(current, other);
-          return diff.currentOnly.length || diff.otherOnly.length ? [{ show: s, ...diff }] : [];
-        });
-      })()
-    : [];
+  const showDifferenceGroups = show ? groupedTourSetlistDifferences(data,show) : [];
+  const showDifferenceCount = showDifferenceGroups.reduce((n,g)=>n+g.shows.length,0);
   const openShow = (s: Show) => {
     history.pushState(null, "");
     setShowId(s.id);
@@ -989,15 +978,29 @@ function App() {
                   "感想 —"}
               </p>
             </section>
-            {showDifferences.length > 0 && (
-              <details className="card">
-                <summary>他公演との差分（{showDifferences.length}公演）</summary>
-                <p className="muted">通常の披露曲を比較。ゲームなど披露回数対象外の企画は含めません。</p>
-                {showDifferences.map(({ show: otherShow, currentOnly, otherOnly }) => (
-                  <div className="stats-row" key={otherShow.id}>
-                    <strong>{otherShow.date} · {otherShow.venue}{otherShow.slot !== "通常" ? `（${otherShow.slot}）` : ""}</strong>
-                    {otherOnly.length > 0 && <span>他公演のみ：{otherOnly.map(title).join("、")}</span>}
-                    {currentOnly.length > 0 && <span>この公演のみ：{currentOnly.map(title).join("、")}</span>}
+            {showDifferenceGroups.length > 0 && (
+              <details className="card setlist-diffs">
+                <summary>他公演との差分（{showDifferenceCount}公演 · {showDifferenceGroups.length}パターン）</summary>
+                <p className="muted">採用曲が異なる公演だけをまとめて表示。同じ曲の曲順・アレンジ・披露回数のみの違いは含めません。</p>
+                {showDifferenceGroups.map((group,i)=>(
+                  <div className="setlist-diff-group" key={group.shows[0].id}>
+                    <div className="setlist-diff-heading"><strong>差分 {String(i+1).padStart(2,"0")}</strong><span>{group.shows.length}公演</span></div>
+                    {group.currentOnly.length>0 && <div className="setlist-diff-side">
+                      <span>この公演だけ</span>
+                      <div className="setlist-diff-chips">{group.currentOnly.map(ref=><span key={ref}>{title(ref)}</span>)}</div>
+                    </div>}
+                    {group.otherOnly.length>0 && <div className="setlist-diff-side">
+                      <span>比較先だけ</span>
+                      <div className="setlist-diff-chips">{group.otherOnly.map(ref=><span key={ref}>{title(ref)}</span>)}</div>
+                    </div>}
+                    <details className="setlist-diff-dates">
+                      <summary>対象公演を見る（{group.shows.length}公演）</summary>
+                      <div>
+                        {group.shows.map(other=><button key={other.id} className="setlist-diff-date" onClick={()=>openShow(other)}>
+                          <span>{other.date.replaceAll("-",".")} · {other.venue}{other.slot !== "通常" ? " · "+other.slot : ""}</span><span>詳細 →</span>
+                        </button>)}
+                      </div>
+                    </details>
                   </div>
                 ))}
               </details>
