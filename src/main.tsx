@@ -103,6 +103,8 @@ function App() {
       facts: Dataset["entryFacts"];
     } | null>(null),
     [backup, setBackup] = useState<Dataset | null>(null),
+    [trialImport, setTrialImport] = useState<Dataset | null>(null),
+    [trialLoaded, setTrialLoaded] = useState(false),
     [libraryDirty, setLibraryDirty] = useState(false),
     [draftConflicted, setDraftConflicted] = useState(false);
   const stateRef = useRef(state),
@@ -529,7 +531,7 @@ function App() {
         </button>
       </header>
       {preview && (
-        <div className="preview">試験表示 · 保存はこの画面内のみ</div>
+        <div className="preview">試験表示 · {trialLoaded ? "初期データ検証中" : "サンプルデータ"} · 保存はこの画面内のみ（再読み込みでリセット）</div>
       )}
       {!online && (
         <div className="error" role="alert">
@@ -1319,6 +1321,60 @@ function App() {
             {tab === "SETTINGS" && (
               <>
                 <h1>設定</h1>
+                {preview && (
+                  <section className="card fields trial-import">
+                    <h2>初期データの試験読み込み</h2>
+                    <p>この画面は試験専用。読み込んだ内容はブラウザーのメモリ内だけで表示し、Firestoreには一切送信しません。再読み込みでサンプルに戻ります。</p>
+                    <label className="file-button">
+                      <Upload size={16} /> 初期登録用JSONを選ぶ
+                      <input type="file" accept="application/json,.json" disabled={busy}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void run(async () => {
+                            if (file.size > 8000000) throw new Error("8MBを超えるJSONです");
+                            setTrialImport(parseBackup(await file.text()));
+                          });
+                          e.target.value = "";
+                        }} />
+                    </label>
+                    {trialImport && (() => {
+                      const withSetlist = trialImport.shows.filter(s => s.hasSavedSetlist);
+                      const rows = withSetlist.flatMap(s => effectiveEntries(trialImport, s) ?? []);
+                      const games = rows.filter(e => e.arrangement === "ARRANGED" && !isCountedPerformance(e));
+                      return (
+                        <div className="restore trial-import-preview">
+                          <h3>検証用データの内容</h3>
+                          <div className="stats-row"><span>公演</span><strong>{trialImport.shows.length}件</strong></div>
+                          <div className="stats-row"><span>セトリ登録済み</span><strong>{withSetlist.length}公演</strong></div>
+                          <div className="stats-row"><span>セトリ表示行</span><strong>{rows.length}件</strong></div>
+                          <div className="stats-row"><span>通常の披露回数に含める行</span><strong>{rows.filter(isCountedPerformance).length}件</strong></div>
+                          <div className="stats-row"><span>アレンジ・披露集計対象外</span><strong>{games.length}件</strong></div>
+                          <div className="stats-row"><span>セトリ未登録</span><strong>{trialImport.shows.length - withSetlist.length}公演</strong></div>
+                          <p>読み込み後は「ALL LIVE」から全公演・曲順・歌割り変更ゲームを確認できるよ。試験モードでの変更は本番に反映されません。</p>
+                          <div className="actions">
+                            <button className="primary" disabled={busy} onClick={() => {
+                              setState({ ...stateRef.current!, data: copy(trialImport), control: {
+                                ...stateRef.current!.control, revision: stateRef.current!.control.revision + 1,
+                              }});
+                              setTrialLoaded(true);
+                              setTrialImport(null);
+                              setShowId(null);
+                              setSongDetail(null);
+                              setLiveMode("all");
+                              setTab("LIVE");
+                            }}>このデータで試験表示</button>
+                            <button disabled={busy} onClick={() => setTrialImport(null)}>キャンセル</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {trialLoaded && <button disabled={busy} onClick={() => {
+                      if (!confirm("試験中の変更を破棄してサンプルに戻しますか？")) return;
+                      setState(copy(fixture)); setTrialLoaded(false); setTrialImport(null);
+                      setShowId(null); setSongDetail(null); setTab("HOME");
+                    }}>サンプルデータに戻す</button>}
+                  </section>
+                )}
                 <LibraryEditor
                   data={data}
                   songs={allSongs}
