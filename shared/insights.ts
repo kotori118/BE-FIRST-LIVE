@@ -112,6 +112,26 @@ export function rareSongRanking<T extends { songRef: string; shows: number; rate
     .sort((a,b) => (a.rate! - b.rate!) || a.shows - b.shows || a.songRef.localeCompare(b.songRef));
 }
 
+/** Add only explicitly selected attendance records. Never alter shows, setlists, or existing attended entries. */
+export function addAttendanceRecords(data: Dataset, selectedShowIds: readonly string[], now: string): Dataset {
+  if (!Number.isFinite(Date.parse(now))) throw Error("登録日時が不正です");
+  const selected = new Set(selectedShowIds);
+  if (selected.size !== selectedShowIds.length) throw Error("参戦公演が重複しています");
+  const known = new Set(data.shows.map(show => show.id));
+  if ([...selected].some(id => !known.has(id))) throw Error("存在しない公演が選択されています");
+  const attendance = [...data.attendance];
+  for (const showId of selected) {
+    const index = attendance.findIndex(a => a.showId === showId);
+    if (index >= 0) {
+      if (attendance[index].attended) continue;
+      attendance[index] = {...attendance[index], attended:true, updatedAt:now};
+    } else {
+      attendance.push({id:showId, revision:0, showId, attended:true, seat:"", note:"", createdAt:now, updatedAt:now});
+    }
+  }
+  return {...data, attendance};
+}
+
 /** Local-only CSV export. No network request or public data publication. */
 export function exportShowsCsv(data: Dataset): string {
   const quote = (v: unknown) => '"' + String(v ?? "").replaceAll('"', '""') + '"';
