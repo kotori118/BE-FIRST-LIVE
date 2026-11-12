@@ -50,7 +50,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, exportShowsCsv } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -86,6 +86,9 @@ function App() {
     [liveMode, setLiveMode] = useState<"mine" | "all">("mine"),
     [liveStatsOpen, setLiveStatsOpen] = useState(false),
     [statsPeriod, setStatsPeriod] = useState<string | null>(null),
+    [selectedPrefecture, setSelectedPrefecture] = useState<string | null>(null),
+    [venuesExpanded, setVenuesExpanded] = useState(false),
+    [toursExpanded, setToursExpanded] = useState(false),
     [songDetail, setSongDetail] = useState<string | null>(null),
     [attendanceEdit, setAttendanceEdit] = useState<{showId:string;attended:boolean;seat:string;note:string} | null>(null),
     [expanded, setExpanded] = useState<string | null>(
@@ -1133,9 +1136,110 @@ function App() {
                         </>
                       )}
                     </section>
-                    <section className="card"><h2>都道府県別</h2>{liveStats.prefectures.map(([p,n]) => <div className="stats-row" key={p}><span>{p}</span><strong>{n}公演</strong></div>)}{liveStats.unknownPrefectures > 0 && <p className="muted">所在地未判定：{liveStats.unknownPrefectures}公演</p>}</section>
-                    <section className="card"><h2>会場別</h2><p className="muted">訪問会場：{liveStats.venues.length}か所</p>{liveStats.venues.map(([v,n]) => <div className="stats-row" key={v}><span>{v}</span><strong>{n}公演</strong></div>)}</section>
-                    <section className="card"><h2>ツアー別</h2><p className="muted">参戦率は登録済み公演の範囲で算出</p>{liveStats.tourStats.map(t => <div className="stats-row" key={t.id}><span>{t.name}</span><strong>{t.attended}/{t.total}公演 <small>{t.rate === null ? "—" : (t.rate*100).toFixed(0)+"%"}</small></strong></div>)}</section>
+                    <section className="card live-stats-tours">
+                      <div className="live-stats-section-head">
+                        <h2>ツアー参戦率</h2>
+                        <span className="muted">{liveStats.tourStats.length}ツアー</span>
+                      </div>
+                      <p className="muted">表示期間に登録されている公演を基準に集計</p>
+                      {liveStats.tourStats.slice(0, toursExpanded ? undefined : 5).map(t => (
+                        <details className="live-stats-tour" key={t.id}>
+                          <summary>
+                            <span className="live-stats-tour-summary">
+                              <strong>{t.name}</strong>
+                              <span className="live-stats-progress-track">
+                                <span style={{width: ((t.rate ?? 0)*100)+"%"}} />
+                              </span>
+                            </span>
+                            <span className="live-stats-tour-rate">
+                              <strong>{t.attended}/{t.total}</strong>
+                              <small>{t.rate === null ? "—" : (t.rate*100).toFixed(0)+"%"}</small>
+                            </span>
+                          </summary>
+                          <div className="live-stats-tour-shows">
+                            {t.shows.map(item => (
+                              <button key={item.id} className="live-stats-tour-show" onClick={() => {
+                                const target = data.shows.find(s => s.id === item.id);
+                                if (target) openShow(target);
+                              }}>
+                                <span className={item.attended ? "live-stats-attended" : "live-stats-not-attended"}>
+                                  {item.attended ? <Check size={14} /> : "—"}
+                                </span>
+                                <span>{item.date} · {item.venue}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </details>
+                      ))}
+                      {liveStats.tourStats.length > 5 && <button className="live-stats-more" onClick={() => setToursExpanded(v => !v)}>{toursExpanded ? "閉じる" : "すべてのツアーを見る（"+liveStats.tourStats.length+"）"}</button>}
+                      {liveStats.standaloneCount > 0 && <p className="muted">ツアーに属さない公演：{liveStats.standaloneCount}公演</p>}
+                      {!liveStats.tourStats.length && !liveStats.standaloneCount && <p className="muted">この期間のツアー参戦記録はまだありません。</p>}
+                    </section>
+                    <section className="card live-stats-venues">
+                      <div className="live-stats-section-head">
+                        <h2>会場ランキング</h2>
+                        <span className="muted">{liveStats.venues.length}会場</span>
+                      </div>
+                      {liveStats.venues.slice(0, venuesExpanded ? undefined : 5).map(([venue,count], index) => {
+                        const max = liveStats.venues[0]?.[1] ?? 1;
+                        return <div className="live-stats-venue" key={venue}>
+                          <span className="live-stats-venue-rank">{String(index+1).padStart(2,"0")}</span>
+                          <div className="live-stats-venue-body">
+                            <div className="live-stats-venue-title"><strong>{venue}</strong><span>{count}公演</span></div>
+                            <div className="live-stats-progress-track"><span style={{width:(count/max*100)+"%"}} /></div>
+                          </div>
+                        </div>;
+                      })}
+                      {liveStats.venues.length > 5 && <button className="live-stats-more" onClick={() => setVenuesExpanded(v => !v)}>{venuesExpanded ? "閉じる" : "すべての会場を見る（"+liveStats.venues.length+"）"}</button>}
+                      {!liveStats.venues.length && <p className="muted">この期間の会場記録はまだありません。</p>}
+                    </section>
+                    <section className="card live-stats-travel">
+                      <div className="live-stats-section-head">
+                        <h2>遠征マップ</h2>
+                        <span className="muted">{liveStats.prefectures.length}/47 都道府県</span>
+                      </div>
+                      <p className="muted">訪れた都道府県をタップすると、公演を確認できるよ。</p>
+                      <div className="travel-map-wrap">
+                        <div className="travel-map" role="group" aria-label="都道府県の簡易配置マップ">
+                          {JAPAN_PREFECTURE_LAYOUT.map(([name,col,row]) => {
+                            const full = prefecture(name) ?? name;
+                            const count = liveStats.prefectures.find(([p]) => p === full)?.[1] ?? 0;
+                            return <button
+                              key={name}
+                              type="button"
+                              className={"travel-map-tile "+(count>=3 ? "level-3" : count===2 ? "level-2" : count===1 ? "level-1" : "level-0")+(selectedPrefecture===full ? " is-selected" : "")}
+                              style={{gridColumn:col,gridRow:row}}
+                              aria-label={full+" "+count+"公演"}
+                              aria-pressed={selectedPrefecture===full}
+                              title={full+" · "+count+"公演"}
+                              onClick={() => setSelectedPrefecture(selectedPrefecture===full ? null : full)}
+                            >{name.slice(0,2)}</button>;
+                          })}
+                        </div>
+                      </div>
+                      <div className="travel-map-legend">
+                        <span><i className="level-0" />未参戦</span>
+                        <span><i className="level-1" />1公演</span>
+                        <span><i className="level-2" />2公演</span>
+                        <span><i className="level-3" />3公演以上</span>
+                      </div>
+                      <p className="travel-map-caption">※ 地理的な形状・距離は正確ではない簡易配置図です。</p>
+                      {selectedPrefecture && (() => {
+                        const regional = statsPeriodView.shows.filter(s => prefecture(s.region) === selectedPrefecture)
+                          .sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+                        return <div className="travel-map-detail">
+                          <div className="live-stats-section-head">
+                            <h3>{selectedPrefecture}</h3><span>{regional.length}公演</span>
+                          </div>
+                          {regional.length ? <div className="travel-map-shows">
+                            {regional.map(s => <button className="travel-map-show" key={s.id} onClick={() => openShow(s)}>
+                              <span>{s.date} · {s.venue}</span><span>›</span>
+                            </button>)}
+                          </div> : <p className="muted">この期間の参戦記録はありません。</p>}
+                        </div>;
+                      })()}
+                      {liveStats.unknownPrefectures > 0 && <p className="muted">都道府県が未登録・判定できない公演：{liveStats.unknownPrefectures}公演</p>}
+                    </section>
                   </>
                 ) : (
                   <>
