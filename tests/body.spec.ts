@@ -52,6 +52,42 @@ describe("v0.24 setlists and analytics", () => {
       rate: 1,
     });
   });
+  it("treats normal and arranged songs as one track while excluding only non-performance corners", () => {
+    const d = trialDataset();
+    const t = d.templates[0];
+    const base = t.entries[0];
+    t.entries = [
+      { ...base, id: "normal", songRef: "U:1023", arrangement: "NORMAL", countsAsPerformance: true },
+      { ...base, id: "acoustic", songRef: "U:1023", arrangement: "ARRANGED", note: "アコースティック", countsAsPerformance: true },
+      { ...base, id: "game", songRef: "U:1023", arrangement: "ARRANGED", note: "歌割り変更ゲーム", countsAsPerformance: false },
+    ];
+    const stats = analyze(d, d.shows);
+    expect(stats).toHaveLength(1);
+    expect(stats[0]).toMatchObject({ songRef: "U:1023", performances: 2, shows: 1, full: 2 });
+    expect(effectiveEntries(d, d.shows[1])).toHaveLength(3);
+    expect(validateDataset(d)).toEqual(d);
+  });
+  it("persists arrangement and counted-performance changes in template overrides", () => {
+    const d = trialDataset();
+    const base = d.templates[0].entries[0];
+    const desired = [{ ...base, arrangement: "ARRANGED" as const, countsAsPerformance: false, note: "歌割り変更ゲーム" }];
+    const operations = deriveOverrides([base], desired);
+    expect(operations).toEqual([{ kind: "PATCH", target: base.id, patch: {
+      arrangement: "ARRANGED", countsAsPerformance: false, note: "歌割り変更ゲーム",
+    }}]);
+    d.overrides.push({id:"test-override",revision:0,showId:d.shows[1].id,templateId:d.templates[0].id,operations});
+    expect(effectiveEntries(d,d.shows[1])?.[0]).toMatchObject(desired[0]);
+  });
+  it("reads legacy setlists with normal and counted defaults", () => {
+    const d = trialDataset();
+    const e: any = d.templates[0].entries[0];
+    delete e.arrangement; delete e.countsAsPerformance; delete e.note;
+    const normalized = validateDataset(d);
+    expect(normalized.templates[0].entries[0]).toMatchObject({
+      arrangement: "NORMAL", countsAsPerformance: true, note: "",
+    });
+    expect(analyze(normalized, normalized.shows)).toHaveLength(29);
+  });
   it("medley setting normalizes SHORT and removal restores FULL", () => {
     const e = trialDataset().templates[0].entries[0];
     expect(medley(e, "m").version).toBe("SHORT");
