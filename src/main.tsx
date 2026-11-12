@@ -32,6 +32,7 @@ import {
 } from "./firebase";
 import {
   effectiveEntries,
+  isCountedPerformance,
   analyze,
   unheard,
   parseBackup,
@@ -508,7 +509,7 @@ function App() {
         <span className="eyebrow">{s.date.replaceAll("-", ".")} · {s.region || "地域未登録"}</span>
         <strong>{s.venue}</strong>
         <small>{data.tours.find((t) => t.id === s.tourId)?.name ?? s.name}</small>
-        <small>{s.hasSavedSetlist ? `${effectiveEntries(data, s)?.length ?? 0}曲` : "セトリ未登録"}</small>
+        <small>{s.hasSavedSetlist ? `${effectiveEntries(data, s)?.filter(isCountedPerformance).length ?? 0}曲` : "セトリ未登録"}</small>
       </button>
       <CheckIn s={s} />
     </div>
@@ -868,6 +869,7 @@ function App() {
                   <span><RotateCcw size={13} aria-hidden="true" /> アンコール</span>
                   <span><Link2 size={13} aria-hidden="true" /> メドレー</span>
                   <span><Scissors size={13} aria-hidden="true" /> SHORT</span>
+                  <span className="track-flag-arranged">アレンジ</span>
                 </div>
               )}
               {!show.hasSavedSetlist ? (
@@ -880,7 +882,10 @@ function App() {
                     </span>
                     <div className="track-content">
                       <strong>{title(entry.songRef)}</strong>
+                      {entry.note && <small className="track-note">{entry.note}</small>}
                       <span className="track-flags">
+                        {entry.arrangement === "ARRANGED" && <span className="track-flag-arranged">アレンジ</span>}
+                        {!isCountedPerformance(entry) && <span className="track-flag-corner">企画・披露回数対象外</span>}
                         {entry.section === "ENCORE" && (
                           <span className="track-flag" role="img" aria-label="アンコール" title="アンコール">
                             <RotateCcw size={15} aria-hidden="true" />
