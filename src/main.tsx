@@ -53,7 +53,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, groupedTourSetlistDifferences, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, groupedTourSetlistDifferences, compareDetailedSetlists, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -75,6 +75,7 @@ function App() {
   const [state, setState] = useState<State | null>(preview ? fixture : null),
     [tab, setTab] = useState<Tab>("HOME"),
     [showId, setShowId] = useState<string | null>(null),
+    [comparisonShowId, setComparisonShowId] = useState(""),
     [error, setError] = useState(""),
     [syncError, setSyncError] = useState(""),
     [syncing,setSyncing]=useState(false),
@@ -527,9 +528,17 @@ function App() {
     );
   const showDifferenceGroups = show ? groupedTourSetlistDifferences(data,show) : [];
   const showDifferenceCount = showDifferenceGroups.reduce((n,g)=>n+g.shows.length,0);
+  const comparisonOptions = show?.tourId && show.hasSavedSetlist
+    ? data.shows.filter(s=>s.id!==show.id && s.tourId===show.tourId && s.hasSavedSetlist)
+      .sort((a,b)=>b.date.localeCompare(a.date)||b.slot.localeCompare(a.slot)||a.id.localeCompare(b.id))
+    : [];
+  const comparisonShow = comparisonOptions.find(s=>s.id===comparisonShowId) ??
+    comparisonOptions.find(s=>s.date<=show!.date) ?? comparisonOptions[comparisonOptions.length-1];
+  const detailedComparison = show && comparisonShow ? compareDetailedSetlists(data,show,comparisonShow) : null;
   const openShow = (s: Show) => {
     history.pushState(null, "");
     setShowId(s.id);
+    setComparisonShowId("");
   };
   const CheckIn = ({ s }: { s: Show }) => registered.some((m) => m.id === s.id)
     ? <span className="attended-badge"><Check size={13} /> {s.date > today ? "参戦予定" : "参戦済み"}</span> : null;
@@ -1005,6 +1014,87 @@ function App() {
                 ))}
               </details>
             )}
+            {detailedComparison && comparisonShow && (
+              <section className="card setlist-compare" aria-label="セトリ詳細比較">
+                <h2>セトリ詳細比較</h2>
+                <p className="muted">同じツアーの別公演と、曲順・アンコール・披露バージョンを比較できるよ。</p>
+                <label className="setlist-compare-picker">
+                  <span>比較する公演</span>
+                  <select aria-label="セトリ比較対象公演" value={comparisonShow.id}
+                    onChange={e=>setComparisonShowId(e.target.value)}>
+                    {comparisonOptions.map(other=><option key={other.id} value={other.id}>
+                      {other.date} · {other.venue} · {other.slot}
+                    </option>)}
+                  </select>
+                </label>
+                <div className="setlist-compare-counts">
+                  <span>この公演 <strong>{detailedComparison.current.length}曲</strong></span>
+                  <span>比較先 <strong>{detailedComparison.other.length}曲</strong></span>
+                </div>
+                {detailedComparison.identical ? (
+                  <p className="setlist-compare-same">披露曲・曲順・アンコール・バージョンに違いはありません。</p>
+                ) : (
+                  <div className="setlist-compare-changes">
+                    {detailedComparison.removed.length>0 && <div className="setlist-compare-change">
+                      <strong>この公演だけ（{detailedComparison.removed.length}曲）</strong>
+                      {detailedComparison.removed.map(r=><p key={r.key}>{r.position}曲目 · {title(r.songRef)}</p>)}
+                    </div>}
+                    {detailedComparison.added.length>0 && <div className="setlist-compare-change">
+                      <strong>比較先だけ（{detailedComparison.added.length}曲）</strong>
+                      {detailedComparison.added.map(r=><p key={r.key}>{r.position}曲目 · {title(r.songRef)}</p>)}
+                    </div>}
+                    {detailedComparison.reordered.length>0 && <div className="setlist-compare-change">
+                      <strong>共通曲の曲順変更（{detailedComparison.reordered.length}曲）</strong>
+                      {detailedComparison.reordered.map(({from,to})=><p key={from.key}>
+                        {title(from.songRef)} <span>{from.position} → {to.position}曲目</span>
+                      </p>)}
+                    </div>}
+                    {detailedComparison.sectionChanges.length>0 && <div className="setlist-compare-change">
+                      <strong>本編／アンコール変更（{detailedComparison.sectionChanges.length}曲）</strong>
+                      {detailedComparison.sectionChanges.map(({from,to})=><p key={from.key}>
+                        {title(from.songRef)} <span>{from.section==="ENCORE"?"アンコール":"本編"} → {to.section==="ENCORE"?"アンコール":"本編"}</span>
+                      </p>)}
+                    </div>}
+                    {detailedComparison.versionChanges.length>0 && <div className="setlist-compare-change">
+                      <strong>FULL／SHORT変更（{detailedComparison.versionChanges.length}曲）</strong>
+                      {detailedComparison.versionChanges.map(({from,to})=><p key={from.key}>
+                        {title(from.songRef)} <span>{from.version??"未設定"} → {to.version??"未設定"}</span>
+                      </p>)}
+                    </div>}
+                    {detailedComparison.medleyChanges.length>0 && <div className="setlist-compare-change">
+                      <strong>メドレー参加変更（{detailedComparison.medleyChanges.length}曲）</strong>
+                      {detailedComparison.medleyChanges.map(({from,to})=><p key={from.key}>
+                        {title(from.songRef)} <span>{from.medley?"メドレー内":"通常"} → {to.medley?"メドレー内":"通常"}</span>
+                      </p>)}
+                    </div>}
+                    {detailedComparison.arrangementChanges.length>0 && <div className="setlist-compare-change">
+                      <strong>アレンジ区分変更（{detailedComparison.arrangementChanges.length}曲）</strong>
+                      {detailedComparison.arrangementChanges.map(({from,to})=><p key={from.key}>
+                        {title(from.songRef)} <span>{from.arrangement==="ARRANGED"?"アレンジ":"通常"} → {to.arrangement==="ARRANGED"?"アレンジ":"通常"}</span>
+                      </p>)}
+                    </div>}
+                  </div>
+                )}
+                <details className="setlist-compare-full">
+                  <summary>両公演の全曲順を見る</summary>
+                  <div className="setlist-compare-lists">
+                    {([
+                      {label:"この公演",rows:detailedComparison.current},
+                      {label:"比較先",rows:detailedComparison.other},
+                    ] as const).map(side=><div key={side.label}>
+                      <h3>{side.label}</h3>
+                      {side.rows.map(row=><div className="setlist-compare-track" key={row.key}>
+                        <span className="setlist-compare-position">{row.position}</span>
+                        <span>{title(row.songRef)}{row.medley?" · メドレー":""}</span>
+                        <small>{row.section==="ENCORE"?"アンコール":"本編"} · {row.version??"未設定"}</small>
+                      </div>)}
+                    </div>)}
+                  </div>
+                </details>
+                <p className="muted setlist-compare-note">セトリ登録済みの公演だけ比較。ゲーム等の非披露項目は除外。曲順変更は両公演に共通する曲の相対順で判定し、曲の追加・削除だけによる番号ずれは変更件数に含めません。同じ曲が複数回登場する場合は登場順に対応付けます。</p>
+              </section>
+            )}
+
           </>
         ) : (
           <>
