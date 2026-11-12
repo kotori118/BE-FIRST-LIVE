@@ -2,6 +2,7 @@ import {
   collections,
   datasetSchema,
   type Dataset,
+  type Collection,
   type Entry,
   type Show,
   type Song,
