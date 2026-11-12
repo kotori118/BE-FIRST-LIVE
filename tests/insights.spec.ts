@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, selectAttendancePeriod } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
   it("normalizes only identifiable prefectures", () => {
@@ -16,6 +16,34 @@ describe("BE:LIVE insights", () => {
     expect(stats.total).toBe(2);
     expect(stats.prefectures).toEqual([["東京都", 2]]);
     expect(stats.tourStats[0]).toMatchObject({ attended: 2, total: 4, rate: 0.5 });
+  });
+  it("defaults to the newest attended year, not the current calendar year", () => {
+    const data = trialDataset();
+    const older = data.shows[0];
+    const newer = {...data.shows[1], id: "future-show", date: "2028-02-01", region: "大阪"};
+    data.shows.push(newer);
+    const view = selectAttendancePeriod(data, [older, newer], null);
+    expect(view.years).toEqual(["2028", "2024"]);
+    expect(view.period).toBe("2028");
+    expect(view.stats.total).toBe(1);
+    expect(view.stats.prefectures).toEqual([["大阪府", 1]]);
+    expect(selectAttendancePeriod(data, [older, newer], "2024").stats.total).toBe(1);
+    expect(selectAttendancePeriod(data, [older, newer], "all").stats.total).toBe(2);
+    expect(selectAttendancePeriod(data, [older, newer], "2027").period).toBe("2028");
+  });
+  it("scopes tour attendance denominator to registered shows in the selected year", () => {
+    const data = trialDataset();
+    const future = {...data.shows[0], id:"future-tour", date:"2027-05-01"};
+    data.shows.push(future);
+    const yearView = selectAttendancePeriod(data, [future], "2027");
+    expect(yearView.stats.tourStats[0]).toMatchObject({attended:1,total:1,rate:1});
+    expect(yearView.allStats.tourStats[0]).toMatchObject({attended:1,total:5,rate:0.2});
+  });
+  it("handles no attendance without inventing a year", () => {
+    const view = selectAttendancePeriod(trialDataset(), [], null);
+    expect(view.years).toEqual([]);
+    expect(view.period).toBe("all");
+    expect(view.stats.total).toBe(0);
   });
   it("uses only saved setlists as the performance-rate denominator", () => {
     const data = trialDataset();
