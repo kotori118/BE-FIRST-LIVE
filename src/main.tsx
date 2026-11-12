@@ -33,6 +33,7 @@ import {
 import {
   effectiveEntries,
   isCountedPerformance,
+  compareSetlistSongs,
   analyze,
   unheard,
   parseBackup,
@@ -500,6 +501,19 @@ function App() {
         data.tours.find((t) => t.id === s.tourId)?.name ?? s.name,
       ].some((x) => x.toLowerCase().includes(query.toLowerCase())),
     );
+  const showDifferences = show?.tourId && show.hasSavedSetlist
+    ? (() => {
+        const current = effectiveEntries(data, show);
+        if (!current) return [];
+        return data.shows.flatMap(s => {
+          if (s.id === show.id || s.tourId !== show.tourId || !s.hasSavedSetlist) return [];
+          const other = effectiveEntries(data, s);
+          if (!other) return [];
+          const diff = compareSetlistSongs(current, other);
+          return diff.currentOnly.length || diff.otherOnly.length ? [{ show: s, ...diff }] : [];
+        });
+      })()
+    : [];
   const openShow = (s: Show) => {
     history.pushState(null, "");
     setShowId(s.id);
@@ -950,42 +964,19 @@ function App() {
                   "感想 —"}
               </p>
             </section>
-            <section className="card">
-              <h2>他公演との差分</h2>
-              {data.shows
-                .filter(
-                  (s) =>
-                    s.id !== show.id &&
-                    s.tourId === show.tourId &&
-                    s.hasSavedSetlist,
-                )
-                .map((s) => {
-                  const current = effectiveEntries(data, show),
-                    other = effectiveEntries(data, s)!;
-                  return (
-                    <p key={s.id}>
-                      {s.date} ·{" "}
-                      {current
-                        ? `${
-                            other
-                              .filter(
-                                (e) =>
-                                  !current.some((x) => x.songRef === e.songRef),
-                              )
-                              .map((e) => title(e.songRef))
-                              .join("、") || "追加曲なし"
-                          }`
-                        : "セトリ未登録"}
-                    </p>
-                  );
-                })}
-              {!data.shows.some(
-                (s) =>
-                  s.id !== show.id &&
-                  s.tourId === show.tourId &&
-                  s.hasSavedSetlist,
-              ) && <p className="empty">比較できるセトリがありません</p>}
-            </section>
+            {showDifferences.length > 0 && (
+              <details className="card">
+                <summary>他公演との差分（{showDifferences.length}公演）</summary>
+                <p className="muted">通常の披露曲を比較。ゲームなど披露回数対象外の企画は含めません。</p>
+                {showDifferences.map(({ show: otherShow, currentOnly, otherOnly }) => (
+                  <div className="stats-row" key={otherShow.id}>
+                    <strong>{otherShow.date} · {otherShow.venue}{otherShow.slot !== "通常" ? `（${otherShow.slot}）` : ""}</strong>
+                    {otherOnly.length > 0 && <span>他公演のみ：{otherOnly.map(title).join("、")}</span>}
+                    {currentOnly.length > 0 && <span>この公演のみ：{currentOnly.map(title).join("、")}</span>}
+                  </div>
+                ))}
+              </details>
+            )}
           </>
         ) : (
           <>
