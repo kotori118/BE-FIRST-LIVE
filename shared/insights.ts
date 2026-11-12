@@ -112,6 +112,31 @@ export function rareSongRanking<T extends { songRef: string; shows: number; rate
     .sort((a,b) => (a.rate! - b.rate!) || a.shows - b.shows || a.songRef.localeCompare(b.songRef));
 }
 
+/** ALL LIVE timeline: tour accordions and one-off shows share the same descending date order.
+ * Tour cards use their latest matching show as the placement date, not the tour's start date.
+ * This changes only presentation; the underlying archive is untouched.
+ */
+export function allLiveTimeline(data: Dataset, visibleShows: readonly Show[]) {
+  const tourById = new Map(data.tours.map(t=>[t.id,t]));
+  const grouped = new Map<string, Show[]>();
+  const singles: Show[] = [];
+  for (const show of visibleShows) {
+    if (show.tourId && tourById.has(show.tourId)) {
+      const list = grouped.get(show.tourId) ?? [];
+      list.push(show);
+      grouped.set(show.tourId,list);
+    } else singles.push(show);
+  }
+  const sections: ({kind:"tour";key:string;date:string;tour:Dataset["tours"][number];shows:Show[]} | {kind:"single";key:string;date:string;show:Show})[] = [];
+  for (const [id,shows] of grouped) {
+    const tour = tourById.get(id)!;
+    const sorted = [...shows].sort((a,b)=>a.date.localeCompare(b.date)||a.slot.localeCompare(b.slot)||a.id.localeCompare(b.id));
+    sections.push({kind:"tour",key:"tour:"+id,date:sorted[sorted.length-1].date,tour,shows:sorted});
+  }
+  for (const show of singles) sections.push({kind:"single",key:"show:"+show.id,date:show.date,show});
+  return sections.sort((a,b)=>b.date.localeCompare(a.date)||a.key.localeCompare(b.key));
+}
+
 /** Date-only BE:LIVE shows are scheduled in Japan; compare by Japan's calendar date. */
 export function japanToday(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("sv-SE", {timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
