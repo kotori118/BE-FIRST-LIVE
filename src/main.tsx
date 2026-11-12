@@ -53,7 +53,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -476,19 +476,27 @@ function App() {
       </div>
     );
   const data = state.data,
-    mine = data.shows.filter((s) =>
+    today = japanToday(),
+    registered = data.shows.filter((s) =>
       data.attendance.some((a) => a.showId === s.id && a.attended),
     ),
+    attendanceTimeline = splitAttendanceByDate(registered,today),
+    mine = attendanceTimeline.past,
+    upcoming = attendanceTimeline.upcoming,
+    completedData = {...data,shows:data.shows.filter(s=>s.date<=today)},
     myStats = analyze(data, mine),
-    statsPeriodView = selectAttendancePeriod(data, mine, statsPeriod),
+    firstHeard = firstHeardSongs(data,mine),
+    myRare = rareSongRanking(myStats),
+    statsPeriodView = selectAttendancePeriod(completedData, mine, statsPeriod),
     liveStats = statsPeriodView.stats,
     allLiveStats = statsPeriodView.allStats,
     heard = new Set(myStats.map((s) => s.songRef)),
     missing = unheard(state.songs, heard),
-    latest = [...mine].sort((a, b) => b.date.localeCompare(a.date))[0],
+    latest = mine[0],
     show = data.shows.find((s) => s.id === showId),
     shownShows = data.shows.filter(
       (s) =>
+        s.date <= today &&
         (scope === "all" || mine.some((m) => m.id === s.id)) &&
         (!year || s.date.startsWith(year)) &&
         (!format || s.format === format) &&
@@ -534,7 +542,8 @@ function App() {
     history.pushState(null, "");
     setShowId(s.id);
   };
-  const CheckIn = ({ s }: { s: Show }) => mine.some((m) => m.id === s.id) ? <span className="attended-badge"><Check size={13} /> 参戦済み</span> : null;
+  const CheckIn = ({ s }: { s: Show }) => registered.some((m) => m.id === s.id)
+    ? <span className="attended-badge"><Check size={13} /> {s.date > today ? "参戦予定" : "参戦済み"}</span> : null;
   const ShowCard = ({ s }: { s: Show }) => (
     <div className="show-row">
       <button className="show-open" onClick={() => openShow(s)}>
@@ -1018,6 +1027,14 @@ function App() {
                     </strong>
                   </div>
                 </div>
+                {upcoming.length > 0 && <section className="card">
+                  <h2>これからの参戦予定 <small>{upcoming.length}公演</small></h2>
+                  {upcoming.slice(0,3).map(s=><button className="stats-row upcoming-show-button" key={s.id} onClick={()=>openShow(s)}>
+                    <span><strong>{s.date.replaceAll("-",".")} · {s.venue}</strong><small>{data.tours.find(t=>t.id===s.tourId)?.name ?? s.name}{s.slot ? " · "+s.slot : ""}</small></span>
+                    <span className="aqua">詳細 →</span>
+                  </button>)}
+                  {upcoming.length > 3 && <button className="subtle-button" onClick={()=>{setLiveMode("mine");navigate("LIVE");}}>参戦予定をすべて見る →</button>}
+                </section>}
                 <section>
                   <h2>最近参加したライブ</h2>
                   {latest ? (
@@ -1061,7 +1078,7 @@ function App() {
             )}
             {tab === "LIVE" && (
               <>
-                <div className="page-title"><h1>LIVE</h1><span>{liveMode === "mine" ? mine.length : data.shows.length}公演</span></div>
+                <div className="page-title"><h1>LIVE</h1><span>{liveMode === "mine" ? registered.length : data.shows.length}公演</span></div>
                 <div className="segmented">
                   <button className={liveMode === "mine" ? "selected" : ""} onClick={() => {setLiveMode("mine");setLiveStatsOpen(false);}}>MY LIVE</button>
                   <button className={liveMode === "all" ? "selected" : ""} onClick={() => {setLiveMode("all");setLiveStatsOpen(false);}}>ALL LIVE</button>
@@ -1079,6 +1096,7 @@ function App() {
                         <option value="all">全期間</option>
                       </select>
                     </div>
+                    {upcoming.length > 0 && <p className="muted">参戦予定 {upcoming.length}公演は実績に含めていません。公演日以降に自動で集計されます。</p>}
                     <div className="live-stats-grid">
                       {[
                         ["参戦公演", liveStats.total, "公演"],
@@ -1110,6 +1128,28 @@ function App() {
                           )}
                         </div>
                       ) : <p className="muted">参戦記録を追加すると、ここにライブの思い出が育っていくよ。</p>}
+                    </section>
+                    <section className="card">
+                      <h2>初めて生で聴いた曲 <small>{firstHeard.length}曲</small></h2>
+                      <p className="muted">参戦済み公演の登録済みセトリから、初めて登場した日を集計。BE:FIRSTとしての初披露とは別の指標です。</p>
+                      {firstHeard.slice(0,5).map(item=><button className="stats-row upcoming-show-button" key={item.songRef} onClick={()=>{setSongDetail(item.songRef);navigate("ANALYSIS");}}>
+                        <span><strong>{title(item.songRef)}</strong><small>{item.date} · {item.venue}</small></span><span className="aqua">詳細 →</span>
+                      </button>)}
+                      {firstHeard.length>5 && <details><summary>すべて見る（{firstHeard.length}曲）</summary>
+                        {firstHeard.slice(5).map(item=><button className="stats-row upcoming-show-button" key={item.songRef} onClick={()=>{setSongDetail(item.songRef);navigate("ANALYSIS");}}>
+                          <span><strong>{title(item.songRef)}</strong><small>{item.date} · {item.venue}</small></span><span className="aqua">詳細 →</span>
+                        </button>)}
+                      </details>}
+                      {!firstHeard.length && <p className="muted">参戦済み公演のセトリを登録すると表示されます。</p>}
+                    </section>
+                    <section className="card">
+                      <h2>自分が聴いたレア曲</h2>
+                      <p className="muted">参戦済み・セトリ登録済み公演の披露率が低い順。未来の参戦予定は含みません。</p>
+                      {myRare.slice(0,5).map(song=><button className="rare rare-button" key={song.songRef} onClick={()=>{setSongDetail(song.songRef);navigate("ANALYSIS");}}>
+                        <span>{title(song.songRef)}</span><strong>{(song.rate!*100).toFixed(1)}%</strong>
+                      </button>)}
+                      {!myRare.length && <p className="muted">集計できるセトリがありません。</p>}
+                      {myRare.length>5 && <button className="subtle-button" onClick={()=>{setScope("mine");setRareOpen(true);navigate("ANALYSIS");}}>レア曲をもっと見る →</button>}
                     </section>
                     <section className="card live-stats-chart">
                       <h2>参戦の軌跡</h2>
@@ -1258,8 +1298,13 @@ function App() {
                 ) : (
                   <>
                     <div className="page-title"><h2>ライブ履歴</h2><button className="subtle-button" onClick={() => setLiveStatsOpen(true)}>MY LIVE STATS →</button></div>
-                    {[...mine].sort((a,b) => b.date.localeCompare(a.date)).map(s => <section className="card live-memory" key={s.id}><ShowCard s={s} /></section>)}
-                    {!mine.length && <div className="card empty">参戦したライブはまだありません<button onClick={() => setLiveMode("all")}>ALL LIVEを見る</button></div>}
+                    {upcoming.length > 0 && <section className="card">
+                      <h2>これからの参戦予定 <small>{upcoming.length}公演</small></h2>
+                      {upcoming.map(s=><ShowCard key={s.id} s={s}/>)}
+                    </section>}
+                    {mine.length > 0 && <h2>参加したライブ <small>{mine.length}公演</small></h2>}
+                    {mine.map(s => <section className="card live-memory" key={s.id}><ShowCard s={s} /></section>)}
+                    {!registered.length && <div className="card empty">参戦予定・参加済みのライブはまだありません<button onClick={() => setLiveMode("all")}>ALL LIVEを見る</button></div>}
                   </>
                 ) : (
                   <>
