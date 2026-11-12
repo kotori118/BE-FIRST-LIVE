@@ -928,3 +928,12 @@ nav button.active { color:#007f8b; }
   .travel-map { grid-template-rows:repeat(19,20px); gap:2px; }
   .travel-map-tile { font-size:9px; border-radius:4px; }
 }
+
+/* Two-choice setlist arrangement; non-performance corners remain visible. */
+.entry-arrangement-options { display:grid; gap:10px; margin-top:10px; padding:12px; border-radius:12px; background:#f4faf9; }
+.entry-arrangement-options > label:not(.inline-check) { display:grid; gap:6px; font-size:12px; color:var(--muted); }
+.entry-arrangement-options input[type="text"], .entry-arrangement-options input:not([type]) { width:100%; }
+.track-note { display:block; margin-top:3px; color:var(--muted); font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
+.track-flag-arranged,.track-flag-corner { display:inline-flex; align-items:center; width:max-content; border-radius:5px; padding:2px 6px; font-size:10px; font-weight:600; line-height:1.5; }
+.track-flag-arranged { color:#167e86; background:#dff5f2; }
+.track-flag-corner { color:#866c4a; background:#f8f0e3; }
