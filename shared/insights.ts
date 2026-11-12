@@ -169,6 +169,49 @@ export function groupedTourSetlistDifferences(data: Dataset, target: Show) {
       (b.shows[0]?.date ?? "").localeCompare(a.shows[0]?.date ?? ""));
 }
 
+/** Read-only comparison of two known setlists.
+ * Duplicate song performances are paired by occurrence, never collapsed into one.
+ * Order changes compare relative order of songs present in BOTH shows, so
+ * adding one song does not misleadingly mark every following song as moved.
+ */
+export function compareDetailedSetlists(data: Dataset, currentShow: Show, otherShow: Show) {
+  const current = effectiveEntries(data,currentShow);
+  const other = effectiveEntries(data,otherShow);
+  if (current === null || other === null) return null;
+  type Row = {key:string;songRef:string;position:number;section:"MAIN"|"ENCORE";
+    version:"FULL"|"SHORT"|null;medley:boolean;arrangement:"NORMAL"|"ARRANGED"};
+  const rows = (entries: typeof current): Row[] => {
+    const occurrences = new Map<string,number>();
+    return entries.filter(isCountedPerformance).map((entry,i)=>{
+      const occurrence = (occurrences.get(entry.songRef) ?? 0)+1;
+      occurrences.set(entry.songRef,occurrence);
+      return {key:JSON.stringify([entry.songRef,occurrence]),songRef:entry.songRef,
+        position:i+1,section:entry.section,version:entry.version,
+        medley:!!entry.medleyGroup,arrangement:entry.arrangement};
+    });
+  };
+  const left = rows(current),right = rows(other);
+  const leftKeys = new Set(left.map(r=>r.key)),rightKeys = new Set(right.map(r=>r.key));
+  const removed = left.filter(r=>!rightKeys.has(r.key));
+  const added = right.filter(r=>!leftKeys.has(r.key));
+  const leftCommon = left.filter(r=>rightKeys.has(r.key));
+  const rightCommon = right.filter(r=>leftKeys.has(r.key));
+  const rightRanks = new Map(rightCommon.map((r,i)=>[r.key,i]));
+  const rightByKey = new Map(right.map(r=>[r.key,r]));
+  const pairs = leftCommon.map((from,i)=>({
+    from,to:rightByKey.get(from.key)!,fromRank:i,toRank:rightRanks.get(from.key)!,
+  }));
+  const reordered = pairs.filter(p=>p.fromRank!==p.toRank);
+  const sectionChanges = pairs.filter(p=>p.from.section!==p.to.section);
+  const versionChanges = pairs.filter(p=>p.from.version!==p.to.version);
+  const medleyChanges = pairs.filter(p=>p.from.medley!==p.to.medley);
+  const arrangementChanges = pairs.filter(p=>p.from.arrangement!==p.to.arrangement);
+  return {current:left,other:right,removed,added,reordered,sectionChanges,
+    versionChanges,medleyChanges,arrangementChanges,
+    identical:!removed.length&&!added.length&&!reordered.length&&!sectionChanges.length&&
+      !versionChanges.length&&!medleyChanges.length&&!arrangementChanges.length};
+}
+
 /** Date-only BE:LIVE shows are scheduled in Japan; compare by Japan's calendar date. */
 export function japanToday(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("sv-SE", {timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
