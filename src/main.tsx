@@ -50,7 +50,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { attendanceStats, songArchive, exportShowsCsv } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, exportShowsCsv } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -85,6 +85,7 @@ function App() {
     [category, setCategory] = useState(""),
     [liveMode, setLiveMode] = useState<"mine" | "all">("mine"),
     [liveStatsOpen, setLiveStatsOpen] = useState(false),
+    [statsPeriod, setStatsPeriod] = useState<string | null>(null),
     [songDetail, setSongDetail] = useState<string | null>(null),
     [attendanceEdit, setAttendanceEdit] = useState<{showId:string;attended:boolean;seat:string;note:string} | null>(null),
     [expanded, setExpanded] = useState<string | null>(
@@ -461,7 +462,9 @@ function App() {
       data.attendance.some((a) => a.showId === s.id && a.attended),
     ),
     myStats = analyze(data, mine),
-    liveStats = attendanceStats(data, mine),
+    statsPeriodView = selectAttendancePeriod(data, mine, statsPeriod),
+    liveStats = statsPeriodView.stats,
+    allLiveStats = statsPeriodView.allStats,
     heard = new Set(myStats.map((s) => s.songRef)),
     missing = unheard(state.songs, heard),
     latest = [...mine].sort((a, b) => b.date.localeCompare(a.date))[0],
@@ -1048,7 +1051,17 @@ function App() {
                 </div>
                 {liveMode === "mine" ? liveStatsOpen ? (
                   <>
-                    <div className="page-title"><h2>MY LIVE STATS</h2><button className="subtle-button" onClick={() => setLiveStatsOpen(false)}>ライブ履歴へ</button></div>
+                    <div className="page-title live-stats-heading">
+                      <h2>MY LIVE STATS</h2>
+                      <button className="subtle-button" onClick={() => setLiveStatsOpen(false)}>ライブ履歴へ</button>
+                    </div>
+                    <div className="live-stats-period">
+                      <label htmlFor="stats-period">集計期間</label>
+                      <select id="stats-period" aria-label="集計期間" value={statsPeriodView.period} onChange={(e) => setStatsPeriod(e.target.value)}>
+                        {statsPeriodView.years.map(y => <option value={y} key={y}>{y}年</option>)}
+                        <option value="all">全期間</option>
+                      </select>
+                    </div>
                     <div className="live-stats-grid">
                       {[
                         ["参戦公演", liveStats.total, "公演"],
@@ -1062,43 +1075,63 @@ function App() {
                       ))}
                     </div>
                     <section className="card live-stats-milestones">
-                      <h2>MY LIVE STORY</h2>
+                      <h2>{statsPeriodView.period === "all" ? "MY LIVE STORY" : statsPeriodView.period + "年のハイライト"}</h2>
                       {liveStats.total ? (
                         <div className="live-stats-milestone-grid">
-                          <div><small>初参戦</small><strong>{liveStats.firstDate}</strong></div>
-                          <div><small>最新参戦</small><strong>{liveStats.lastDate}</strong></div>
-                          <div><small>参戦した年</small><strong>{liveStats.activeYears}年</strong></div>
-                          <div><small>最多参戦年</small><strong>{liveStats.peakYear?.[0] ?? "—"} <small>{liveStats.peakYear?.[1] ?? 0}公演</small></strong></div>
+                          <div><small>{statsPeriodView.period === "all" ? "初参戦" : "その年の初参戦"}</small><strong>{liveStats.firstDate}</strong></div>
+                          <div><small>{statsPeriodView.period === "all" ? "最新参戦" : "その年の最終参戦"}</small><strong>{liveStats.lastDate}</strong></div>
+                          {statsPeriodView.period === "all" ? (
+                            <>
+                              <div><small>参戦した年</small><strong>{liveStats.activeYears}年</strong></div>
+                              <div><small>最多参戦年</small><strong>{liveStats.peakYear?.[0] ?? "—"} <small>{liveStats.peakYear?.[1] ?? 0}公演</small></strong></div>
+                            </>
+                          ) : (
+                            <>
+                              <div><small>最多参戦月</small><strong>{liveStats.peakMonth ? Number(liveStats.peakMonth[0].slice(5)) + "月" : "—"} <small>{liveStats.peakMonth?.[1] ?? 0}公演</small></strong></div>
+                              <div><small>最多訪問会場</small><strong>{liveStats.venues[0]?.[0] ?? "—"}</strong></div>
+                            </>
+                          )}
                         </div>
                       ) : <p className="muted">参戦記録を追加すると、ここにライブの思い出が育っていくよ。</p>}
                     </section>
                     <section className="card live-stats-chart">
                       <h2>参戦の軌跡</h2>
-                      <p className="muted">年別の参戦数</p>
-                      {liveStats.years.length ? (
-                        <div className="live-stats-bars">
-                          {[...liveStats.years].reverse().map(([year, count]) => {
-                            const previous = liveStats.years.find(([y]) => y === String(Number(year) - 1));
-                            const max = Math.max(1, ...liveStats.years.map(([, n]) => n));
-                            return <div className="live-stats-bar-row" key={year}>
-                              <span>{year}</span>
-                              <div className="live-stats-bar-track"><div style={{ width: (100 * count / max) + "%" }} /></div>
-                              <strong>{count}<small>公演</small></strong>
-                              <small className="live-stats-year-delta">{previous ? "前年比 " + (count - previous[1] > 0 ? "+" : "") + (count - previous[1]) : "—"}</small>
-                            </div>;
-                          })}
-                        </div>
-                      ) : <p className="muted">参戦記録がまだありません。</p>}
-                      <p className="muted">最多参戦月：{liveStats.peakMonth ? liveStats.peakMonth[0] + "（" + liveStats.peakMonth[1] + "公演）" : "—"}</p>
-                    </section>
-                    <section className="card">
-                      <h2>月別の参戦数</h2>
-                      <div className="live-stats-months">
-                        {liveStats.months.map(([month, count]) => <div className="live-stats-month" key={month}>
-                          <span>{month}</span><strong>{count}公演</strong>
-                        </div>)}
-                        {!liveStats.months.length && <p className="muted">記録が増えると月ごとの傾向が見えるよ。</p>}
-                      </div>
+                      {statsPeriodView.period === "all" ? (
+                        <>
+                          <p className="muted">年別の参戦数</p>
+                          {allLiveStats.years.length ? (
+                            <div className="live-stats-bars">
+                              {[...allLiveStats.years].reverse().map(([year, count]) => {
+                                const previous = allLiveStats.years.find(([y]) => y === String(Number(year) - 1));
+                                const max = Math.max(1, ...allLiveStats.years.map(([, n]) => n));
+                                return <div className="live-stats-bar-row" key={year}>
+                                  <span>{year}</span>
+                                  <div className="live-stats-bar-track"><div style={{ width: (100 * count / max) + "%" }} /></div>
+                                  <strong>{count}<small>公演</small></strong>
+                                  <small className="live-stats-year-delta">{previous ? "前年比 " + (count - previous[1] > 0 ? "+" : "") + (count - previous[1]) : "—"}</small>
+                                </div>;
+                              })}
+                            </div>
+                          ) : <p className="muted">参戦記録がまだありません。</p>}
+                        </>
+                      ) : (
+                        <>
+                          <p className="muted">{statsPeriodView.period}年・月別参戦数</p>
+                          <div className="live-stats-month-chart" aria-label={statsPeriodView.period + "年の月別参戦数"}>
+                            {Array.from({length:12}, (_,i) => {
+                              const month = String(i+1).padStart(2,"0");
+                              const count = liveStats.months.find(([key]) => key === statsPeriodView.period + "-" + month)?.[1] ?? 0;
+                              const max = Math.max(1, ...liveStats.months.map(([,n])=>n));
+                              return <div className="live-stats-month-column" key={month} title={i+1+"月: "+count+"公演"}>
+                                <span className="live-stats-month-count">{count || ""}</span>
+                                <div className="live-stats-month-bar-area">{count > 0 && <div className="live-stats-month-bar" style={{height:(count/max*100)+"%"}} />}</div>
+                                <small>{i+1}</small>
+                              </div>;
+                            })}
+                          </div>
+                          <p className="muted">横軸：月　縦軸：参戦公演数（数字は公演数）</p>
+                        </>
+                      )}
                     </section>
                     <section className="card"><h2>都道府県別</h2>{liveStats.prefectures.map(([p,n]) => <div className="stats-row" key={p}><span>{p}</span><strong>{n}公演</strong></div>)}{liveStats.unknownPrefectures > 0 && <p className="muted">所在地未判定：{liveStats.unknownPrefectures}公演</p>}</section>
                     <section className="card"><h2>会場別</h2><p className="muted">訪問会場：{liveStats.venues.length}か所</p>{liveStats.venues.map(([v,n]) => <div className="stats-row" key={v}><span>{v}</span><strong>{n}公演</strong></div>)}</section>
