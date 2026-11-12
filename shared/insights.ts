@@ -112,6 +112,34 @@ export function rareSongRanking<T extends { songRef: string; shows: number; rate
     .sort((a,b) => (a.rate! - b.rate!) || a.shows - b.shows || a.songRef.localeCompare(b.songRef));
 }
 
+/** Date-only BE:LIVE shows are scheduled in Japan; compare by Japan's calendar date. */
+export function japanToday(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("sv-SE", {timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
+}
+
+/** Future checked-in shows are plans, not completed concert memories. */
+export function splitAttendanceByDate(registered: readonly Show[], today: string) {
+  const past = registered.filter(s=>s.date<=today).sort((a,b)=>b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const upcoming = registered.filter(s=>s.date>today).sort((a,b)=>a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  return {past,upcoming};
+}
+
+/** First time the user heard each song, based strictly on known past setlists. */
+export function firstHeardSongs(data: Dataset, attendedPast: readonly Show[]) {
+  const seen = new Set<string>();
+  const first: {songRef:string;showId:string;date:string;venue:string}[] = [];
+  for (const show of [...attendedPast].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id))) {
+    const entries = effectiveEntries(data,show);
+    if (entries === null) continue;
+    for (const entry of entries) {
+      if (!isCountedPerformance(entry) || seen.has(entry.songRef)) continue;
+      seen.add(entry.songRef);
+      first.push({songRef:entry.songRef,showId:show.id,date:show.date,venue:show.venue});
+    }
+  }
+  return first;
+}
+
 /** Add only explicitly selected attendance records. Never alter shows, setlists, or existing attended entries. */
 export function addAttendanceRecords(data: Dataset, selectedShowIds: readonly string[], now: string): Dataset {
   if (!Number.isFinite(Date.parse(now))) throw Error("登録日時が不正です");
