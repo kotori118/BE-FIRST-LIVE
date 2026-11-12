@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, rareSongRanking, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
   it("normalizes only identifiable prefectures", () => {
@@ -88,6 +88,27 @@ describe("BE:LIVE insights", () => {
     expect(a.performances).toBe(1);
     expect(a.shows).toBe(1);
     expect(a.history.some(h => h.entry.id === "game-entry")).toBe(false);
+  });
+  it("rare ranking excludes unperformed songs and undefined rates", () => {
+    const list = [
+      {songRef:"U:2", shows:2, rate:0.5},
+      {songRef:"U:4", shows:0, rate:0},
+      {songRef:"U:3", shows:1, rate:null},
+      {songRef:"U:1", shows:1, rate:0.25},
+      {songRef:"U:5", shows:1, rate:0.5},
+    ];
+    expect(rareSongRanking(list).map(x=>x.songRef)).toEqual(["U:1","U:5","U:2"]);
+    expect(list.map(x=>x.songRef)).toEqual(["U:2","U:4","U:3","U:1","U:5"]);
+  });
+  it("rare ranking excludes ranges with no saved setlists", () => {
+    const data = trialDataset();
+    const ref = "U:1023";
+    const full = songArchive(data,data.shows,ref);
+    const unknown = songArchive(data,[data.shows[0]],ref);
+    expect(full.rate).toBe(1);
+    expect(unknown.rate).toBeNull();
+    expect(rareSongRanking([{songRef:ref,shows:full.shows,rate:full.rate}])).toHaveLength(1);
+    expect(rareSongRanking([{songRef:ref,shows:unknown.shows,rate:unknown.rate}])).toHaveLength(0);
   });
   it("uses only saved setlists as the performance-rate denominator", () => {
     const data = trialDataset();
