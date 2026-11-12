@@ -80,6 +80,15 @@ describe("BE:LIVE insights", () => {
     expect(stats.unknownPrefectures).toBe(1);
     expect(stats.prefectures).toEqual([]);
   });
+  it("does not count an arranged game as a song archive performance", () => {
+    const d = trialDataset();
+    const base = d.templates[0].entries[0];
+    d.templates[0].entries.push({ ...base, id: "game-entry", songRef: "U:1023", arrangement: "ARRANGED", note: "歌割り変更ゲーム", countsAsPerformance: false });
+    const a = songArchive(d, d.shows, "U:1023");
+    expect(a.performances).toBe(1);
+    expect(a.shows).toBe(1);
+    expect(a.history.some(h => h.entry.id === "game-entry")).toBe(false);
+  });
   it("uses only saved setlists as the performance-rate denominator", () => {
     const data = trialDataset();
     const archive = songArchive(data, data.shows, "U:1023");
