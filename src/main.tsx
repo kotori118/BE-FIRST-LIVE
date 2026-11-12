@@ -34,6 +34,7 @@ import {
   effectiveEntries,
   isCountedPerformance,
   compareSetlistSongs,
+  initialImportPreflight,
   analyze,
   unheard,
   parseBackup,
@@ -106,6 +107,7 @@ function App() {
     [backup, setBackup] = useState<Dataset | null>(null),
     [trialImport, setTrialImport] = useState<{data:Dataset;songs:Song[]|null} | null>(null),
     [trialLoaded, setTrialLoaded] = useState(false),
+    [importAudit, setImportAudit] = useState<Dataset | null>(null),
     [libraryDirty, setLibraryDirty] = useState(false),
     [draftConflicted, setDraftConflicted] = useState(false);
   const stateRef = useRef(state),
@@ -1312,6 +1314,55 @@ function App() {
             {tab === "SETTINGS" && (
               <>
                 <h1>設定</h1>
+                <section className="card fields">
+                  <h2>歴代ライブの初期登録・差分監査</h2>
+                  <p>現在のデータと初期登録JSONを比較して、重複公演・楽曲・既存参戦記録への影響を確認するよ。<strong>ここでは登録も上書きもしません。</strong> JSONはこの端末内だけで読み取ります。</p>
+                  <label className="file-button">
+                    <Upload size={16} /> 初期登録JSONを選んで比較
+                    <input type="file" accept="application/json,.json" disabled={busy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void run(async () => {
+                          if (file.size > 8000000) throw new Error("8MBを超えるJSONです");
+                          const raw = JSON.parse(await file.text());
+                          setImportAudit(parseBackup(JSON.stringify(raw.data ?? raw)));
+                        });
+                        e.target.value = "";
+                      }} />
+                  </label>
+                  {importAudit && (() => {
+                    const result = initialImportPreflight(data, importAudit, state.songs);
+                    return (
+                      <div className="restore">
+                        <h3>本番登録前の差分チェック</h3>
+                        <div className="stats-row"><span>初期データの公演</span><strong>{result.incomingShows}件</strong></div>
+                        <div className="stats-row"><span>既存公演と重複しない公演</span><strong>{result.newShows}件</strong></div>
+                        <div className="stats-row"><span>同一公演の候補</span><strong>{result.showOverlaps.length}件</strong></div>
+                        <div className="stats-row"><span>ID衝突・内容不一致</span><strong>{result.entityIdConflicts.length}件</strong></div>
+                        <div className="stats-row"><span>同名ツアーの候補</span><strong>{result.matchingTours.length}件</strong></div>
+                        <div className="stats-row"><span>同名LIVE限定曲の候補</span><strong>{result.matchingLocalSongs.length}件</strong></div>
+                        <div className="stats-row"><span>既存参戦記録（保持対象）</span><strong>{result.existingAttendance}件</strong></div>
+                        {result.universeCatalogProvided && result.unresolvedUniverseRefs.length > 0 &&
+                          <p>現在の楽曲同期データにないSongID：{result.unresolvedUniverseRefs.join("、")}。照合前に勝手に統合しないよ。</p>}
+                        {result.showOverlaps.length > 0 && (
+                          <details><summary>重複公演の候補を見る（{result.showOverlaps.length}件）</summary>
+                            {result.showOverlaps.map(x => <p key={x.incomingId}>{x.date} · {x.venue} · 既存 {x.currentId} / 取込 {x.incomingId}（既存セトリ{x.currentHasSetlist ? "あり" : "なし"}）</p>)}
+                          </details>
+                        )}
+                        {result.unsafeShowIds.length > 0 && (
+                          <p className="error">同じIDなのに別公演の可能性があります：{result.unsafeShowIds.map(x => x.incomingId).join("、")}</p>
+                        )}
+                        <p>{result.requiresManualReconciliation
+                          ? "重複・衝突の候補があります。既存の参戦記録や編集済みセトリを優先し、統合方法の確認が必要です。"
+                          : "重複候補は見つかりませんでした。ただし、実際の登録は別途バックアップと承認が必要です。"}</p>
+                        <div className="actions">
+                          <button onClick={() => download("BE_LIVE_import_preflight.json", JSON.stringify(result, null, 2))}><Download size={15}/> 差分監査結果を保存</button>
+                          <button onClick={() => setImportAudit(null)}>閉じる</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </section>
                 {preview && (
                   <section className="card fields trial-import">
                     <h2>初期データの試験読み込み</h2>
