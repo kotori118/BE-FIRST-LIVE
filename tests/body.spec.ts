@@ -14,6 +14,7 @@ import {
   parseBackup,
   importPreview,
   initialImportPreflight,
+  validateFreshInitialArchive,
   canonicalDatasetJson,
 } from "../shared/domain";
 import { mergeCandidates } from "../shared/universe";
@@ -68,6 +69,28 @@ describe("v0.24 setlists and analytics", () => {
     expect(report.matchingTours.length).toBeGreaterThan(0);
     expect(report.requiresManualReconciliation).toBe(true);
     expect(JSON.stringify(current)).toBe(original);
+  });
+  it("allows approved first-run data only when the current dataset is empty and songs are resolved", () => {
+    const source = trialDataset();
+    const empty = {
+      ...source, tours: [], shows: [], templates: [], overrides: [],
+      directEntries: [], entryFacts: [], localSongs: [], songMetadata: [],
+      releases: [], releaseTracks: [], attendance: [],
+    };
+    const result = validateFreshInitialArchive(empty, source, trialSongs);
+    expect(result.newShows).toBe(4);
+    expect(() => validateFreshInitialArchive(source, source, trialSongs)).toThrow(/空ではありません/);
+    expect(() => validateFreshInitialArchive(empty, source, [])).toThrow(/Universe/);
+    expect(() => validateFreshInitialArchive(empty, source, [trialSongs[0]])).toThrow(/SongID/);
+    const withAttendance = structuredClone(source);
+    withAttendance.attendance.push({
+      id: "test", revision: 0, showId: source.shows[0].id,
+      attended: true, seat: "", note: "",
+      createdAt: "2026-11-12T01:00:00+09:00",
+      updatedAt: "2026-11-12T01:00:00+09:00",
+    });
+    expect(() => validateFreshInitialArchive(empty, withAttendance, trialSongs)).toThrow(/参戦記録/);
+    expect(() => validateFreshInitialArchive(empty, empty, trialSongs)).toThrow(/公演/);
   });
   it("blocks same-ID different-date collisions in the import preflight", () => {
     const current = trialDataset();
