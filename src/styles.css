@@ -836,3 +836,24 @@ nav button.active { color:#007f8b; }
   .hero { padding:21px; }
   .history-row { align-items:flex-start; }
 }
+
+/* MY LIVE STATS: compact, responsive and scoped to personal live history. */
+.live-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; margin:0 0 20px; }
+.live-stat-tile { min-width:0; padding:18px; display:grid; gap:9px; }
+.live-stat-tile > span { color:var(--muted); font-size:12px; }
+.live-stat-tile strong { font-family:Outfit,"Zen Kaku Gothic New",sans-serif; font-size:31px; line-height:1.1; color:#163e43; }
+.live-stat-tile small { font-family:inherit; font-size:11px; font-weight:400; color:var(--muted); margin-left:5px; }
+.live-stats-milestone-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:17px 12px; }
+.live-stats-milestone-grid > div { display:grid; gap:5px; min-width:0; }
+.live-stats-milestone-grid small { color:var(--muted); font-size:11px; font-weight:400; }
+.live-stats-milestone-grid strong { font-size:14px; overflow-wrap:anywhere; }
+.live-stats-bars { display:grid; gap:13px; padding:8px 0; }
+.live-stats-bar-row { display:grid; grid-template-columns:42px minmax(0,1fr) 48px 58px; gap:9px; align-items:center; font-size:12px; }
+.live-stats-bar-track { height:13px; border-radius:5px; background:#edf5f4; overflow:hidden; }
+.live-stats-bar-track > div { height:100%; border-radius:5px; background:linear-gradient(90deg,#6fcfc5,#079aa5); }
+.live-stats-bar-row strong { font-size:14px; text-align:right; white-space:nowrap; }
+.live-stats-bar-row strong small { font-size:10px; margin-left:2px; font-weight:400; }
+.live-stats-year-delta { font-size:10px; color:var(--muted); text-align:right; white-space:nowrap; }
+.live-stats-months { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.live-stats-month { display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px; background:#f3f9f8; border-radius:9px; padding:10px; font-size:12px; }
+.live-stats-month strong { color:#177d83; }
