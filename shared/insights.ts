@@ -13,11 +13,11 @@ const group = (values: string[]) => Object.entries(values.reduce<Record<string, 
   return counts;
 }, {})).sort(([a, ac], [b, bc]) => bc - ac || a.localeCompare(b, "ja"));
 
-export function attendanceStats(data: Dataset, mine: Show[]) {
+export function attendanceStats(data: Dataset, mine: Show[], year?: string) {
   const sorted = [...mine].sort((a, b) => a.date.localeCompare(b.date));
   const knownPrefectures = mine.map((s) => prefecture(s.region)).filter((x): x is string => x !== null);
   const tourStats = data.tours.map((tour) => {
-    const registered = data.shows.filter((s) => s.tourId === tour.id);
+    const registered = data.shows.filter((s) => s.tourId === tour.id && (!year || s.date.startsWith(year + "-")));
     const attended = registered.filter((s) => mine.some((m) => m.id === s.id)).length;
     return { id: tour.id, name: tour.name, attended, total: registered.length, rate: registered.length ? attended / registered.length : null };
   }).filter((t) => t.attended).sort((a, b) => b.attended - a.attended || a.name.localeCompare(b.name, "ja"));
@@ -41,6 +41,17 @@ export function attendanceStats(data: Dataset, mine: Show[]) {
     venues: group(mine.map((s) => s.venue)),
     tourStats,
   };
+}
+
+/** Filter MY LIVE STATS by attended year, defaulting to the newest attended year.
+ * "all" is the only unfiltered view; no stored records are modified.
+ */
+export function selectAttendancePeriod(data: Dataset, mine: Show[], requested: string | null) {
+  const years = [...new Set(mine.map(s => s.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
+  const period = requested === "all" ? "all" : requested && years.includes(requested) ? requested : years[0] ?? "all";
+  const allStats = attendanceStats(data, mine);
+  const stats = period === "all" ? allStats : attendanceStats(data, mine.filter(s => s.date.startsWith(period + "-")), period);
+  return { years, period, stats, allStats };
 }
 
 export function songArchive(data: Dataset, shows: Show[], ref: string) {
