@@ -1,8 +1,44 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, groupedTourSetlistDifferences, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
+  it("collapses identical tour song differences across several shows", () => {
+    const data = trialDataset();
+    data.shows = data.shows.map(s=>({...s,hasSavedSetlist:true,templateId:"tokyo-0303"}));
+    data.overrides = [
+      {id:"remove-a",revision:0,showId:data.shows[1].id,templateId:"tokyo-0303",
+       operations:[{kind:"REMOVE" as const,target:"entry-01"}]},
+      {id:"remove-b",revision:0,showId:data.shows[2].id,templateId:"tokyo-0303",
+       operations:[{kind:"REMOVE" as const,target:"entry-01"}]},
+      {id:"remove-c",revision:0,showId:data.shows[3].id,templateId:"tokyo-0303",
+       operations:[{kind:"REMOVE" as const,target:"entry-02"}]},
+    ];
+    const snapshot = JSON.stringify(data);
+    const result = groupedTourSetlistDifferences(data,data.shows[0]);
+    expect(result).toHaveLength(2);
+    expect(result[0].currentOnly).toEqual(["U:1003"]);
+    expect(result[0].otherOnly).toEqual([]);
+    expect(result[0].shows.map(s=>s.id)).toEqual([data.shows[2].id,data.shows[1].id]);
+    expect(result[1].currentOnly).toEqual(["U:1023"]);
+    expect(result[1].shows.map(s=>s.id)).toEqual([data.shows[3].id]);
+    expect(JSON.stringify(data)).toBe(snapshot);
+  });
+  it("hides identical setlists and ignores game corners and unknown setlists", () => {
+    const data = trialDataset();
+    const base = data.shows[1];
+    const identical = {...data.shows[0],hasSavedSetlist:true,templateId:"tokyo-0303"};
+    const unknown = data.shows[2];
+    data.shows = [base,identical,unknown];
+    expect(groupedTourSetlistDifferences(data,base)).toEqual([]);
+    data.templates[0].entries.push({
+      ...data.templates[0].entries[0],
+      id:"game-only",songRef:"L:game-only",countsAsPerformance:false,arrangement:"ARRANGED",
+    });
+    expect(groupedTourSetlistDifferences(data,base)).toEqual([]);
+    expect(groupedTourSetlistDifferences(data,unknown)).toEqual([]);
+    expect(groupedTourSetlistDifferences(data,{...base,tourId:null})).toEqual([]);
+  });
   it("interleaves standalone shows with tour accordions by latest show date", () => {
     const data = trialDataset();
     const single2026 = {...data.shows[0],id:"single-2026",tourId:null,date:"2026-03-20",name:"2026 special"};
