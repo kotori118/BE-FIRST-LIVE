@@ -13,6 +13,7 @@ import {
   exportJson,
   parseBackup,
   importPreview,
+  initialImportPreflight,
   canonicalDatasetJson,
 } from "../shared/domain";
 import { mergeCandidates } from "../shared/universe";
@@ -52,6 +53,29 @@ describe("v0.24 setlists and analytics", () => {
       short: 1,
       rate: 1,
     });
+  });
+  it("preflights history without replacing attendance or silently overwriting shows", () => {
+    const incoming = trialDataset();
+    const empty = { ...trialDataset(), tours: [], shows: [], templates: [], overrides: [], directEntries: [], entryFacts: [], localSongs: [], songMetadata: [], releases: [], releaseTracks: [], attendance: [] };
+    const fresh = initialImportPreflight(empty, incoming, trialSongs);
+    expect(fresh.newShows).toBe(incoming.shows.length);
+    expect(fresh.showOverlaps).toHaveLength(0);
+    const current = trialDataset();
+    const original = JSON.stringify(current);
+    const report = initialImportPreflight(current, incoming, trialSongs);
+    expect(report.newShows).toBe(0);
+    expect(report.showOverlaps).toHaveLength(incoming.shows.length);
+    expect(report.matchingTours.length).toBeGreaterThan(0);
+    expect(report.requiresManualReconciliation).toBe(true);
+    expect(JSON.stringify(current)).toBe(original);
+  });
+  it("blocks same-ID different-date collisions in the import preflight", () => {
+    const current = trialDataset();
+    const incoming = trialDataset();
+    incoming.shows[0].date = "2020-01-01";
+    const report = initialImportPreflight(current, incoming);
+    expect(report.unsafeShowIds).toEqual([expect.objectContaining({ incomingId: incoming.shows[0].id })]);
+    expect(report.entityIdConflicts).toContainEqual({ collection: "shows", id: incoming.shows[0].id });
   });
   it("hides empty comparisons, ignores games and deduplicates repeated performances", () => {
     const d = trialDataset();
