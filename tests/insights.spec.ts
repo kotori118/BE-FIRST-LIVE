@@ -1,8 +1,31 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, rareSongRanking, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
+  it("bulk attendance adds only selected shows and preserves existing records", () => {
+    const data = trialDataset();
+    const first = data.shows[0].id;
+    const second = data.shows[1].id;
+    const old = {id:first,revision:3,showId:first,attended:false,seat:"A12",note:"既存の感想",createdAt:"2026-01-01T00:00:00.000Z",updatedAt:"2026-01-01T00:00:00.000Z"};
+    data.attendance = [old];
+    const original = JSON.stringify(data);
+    const next = addAttendanceRecords(data,[first,second],"2026-11-12T00:00:00.000Z");
+    expect(JSON.stringify(data)).toBe(original);
+    expect(next.shows).toEqual(data.shows);
+    expect(next.templates).toEqual(data.templates);
+    expect(next.overrides).toEqual(data.overrides);
+    expect(next.attendance).toHaveLength(2);
+    expect(next.attendance.find(a=>a.showId===first)).toMatchObject({attended:true,seat:"A12",note:"既存の感想",revision:3,createdAt:old.createdAt});
+    expect(next.attendance.find(a=>a.showId===second)).toMatchObject({attended:true,seat:"",note:"",revision:0});
+    expect(addAttendanceRecords(next,[first],"2026-11-13T00:00:00.000Z").attendance).toEqual(next.attendance);
+  });
+  it("bulk attendance rejects unknown and duplicate show IDs", () => {
+    const data = trialDataset();
+    const now = "2026-11-12T00:00:00.000Z";
+    expect(()=>addAttendanceRecords(data,["unknown"],now)).toThrow();
+    expect(()=>addAttendanceRecords(data,[data.shows[0].id,data.shows[0].id],now)).toThrow();
+  });
   it("normalizes only identifiable prefectures", () => {
     expect(prefecture("東京")).toBe("東京都");
     expect(prefecture("大阪府")).toBe("大阪府");
