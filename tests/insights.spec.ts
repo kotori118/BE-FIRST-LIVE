@@ -31,9 +31,12 @@ describe("BE:LIVE insights", () => {
     const unknown = data.shows[2];
     data.shows = [base,identical,unknown];
     expect(groupedTourSetlistDifferences(data,base)).toEqual([]);
-    data.templates[0].entries.push({
-      ...data.templates[0].entries[0],
-      id:"game-only",songRef:"L:game-only",countsAsPerformance:false,arrangement:"ARRANGED",
+    data.overrides.push({
+      id:"only-game",revision:0,showId:identical.id,templateId:"tokyo-0303",
+      operations:[{kind:"ADD",after:"entry-01",entry:{
+        ...data.templates[0].entries[0],
+        id:"game-only",songRef:"L:game-only",countsAsPerformance:false,arrangement:"ARRANGED",
+      }}],
     });
     expect(groupedTourSetlistDifferences(data,base)).toEqual([]);
     expect(groupedTourSetlistDifferences(data,unknown)).toEqual([]);
