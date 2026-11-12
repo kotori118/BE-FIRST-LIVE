@@ -1,8 +1,36 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
+  it("uses the Japan calendar date even when the device timezone differs", () => {
+    expect(japanToday(new Date("2026-11-11T15:30:00Z"))).toBe("2026-11-12");
+    expect(japanToday(new Date("2026-11-11T14:30:00Z"))).toBe("2026-11-11");
+  });
+  it("keeps future checked-in shows as plans, not latest completed attendance", () => {
+    const data = trialDataset();
+    const old = data.shows[0];
+    const today = {...data.shows[1],id:"today-show",date:"2026-11-12"};
+    const future = {...data.shows[2],id:"future-show",date:"2027-05-01"};
+    const result = splitAttendanceByDate([old,future,today],"2026-11-12");
+    expect(result.past.map(s=>s.id)).toEqual(["today-show",old.id]);
+    expect(result.upcoming.map(s=>s.id)).toEqual(["future-show"]);
+    expect(selectAttendancePeriod(data,result.past,null).period).toBe("2026");
+    expect(splitAttendanceByDate([old,future,today],"2027-05-01").upcoming).toHaveLength(0);
+    expect(data.shows).toHaveLength(4);
+  });
+  it("first-heard songs exclude future shows, missing setlists and repeated songs", () => {
+    const data = trialDataset();
+    const known = data.shows[1];
+    const unknown = data.shows[0];
+    const future = {...known,id:"future-known",date:"2027-05-01"};
+    const result = firstHeardSongs(data,splitAttendanceByDate([future,unknown,known],"2026-11-12").past);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every(x=>x.showId===known.id)).toBe(true);
+    expect(new Set(result.map(x=>x.songRef)).size).toBe(result.length);
+    expect(firstHeardSongs(data,[known,known])).toEqual(result);
+    expect(firstHeardSongs(data,[unknown])).toEqual([]);
+  });
   it("bulk attendance adds only selected shows and preserves existing records", () => {
     const data = trialDataset();
     const first = data.shows[0].id;
