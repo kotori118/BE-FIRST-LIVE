@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, selectAttendancePeriod } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
   it("normalizes only identifiable prefectures", () => {
@@ -44,6 +44,41 @@ describe("BE:LIVE insights", () => {
     expect(view.years).toEqual([]);
     expect(view.period).toBe("all");
     expect(view.stats.total).toBe(0);
+  });
+  it("has a unique position for every prefecture in the schematic travel map", () => {
+    const names = JAPAN_PREFECTURE_LAYOUT.map(([name]) => name);
+    const positions = JAPAN_PREFECTURE_LAYOUT.map(([,col,row]) => col + ":" + row);
+    expect(names).toHaveLength(47);
+    expect(new Set(names).size).toBe(47);
+    expect(new Set(positions).size).toBe(47);
+    expect(names.every(name => prefecture(name) !== null)).toBe(true);
+    expect(JAPAN_PREFECTURE_LAYOUT.every(([,col,row]) => col >= 1 && col <= 11 && row >= 1 && row <= 19)).toBe(true);
+  });
+  it("provides tour details with both attended and not-attended registered shows", () => {
+    const data = trialDataset();
+    const stats = attendanceStats(data, [data.shows[1]]);
+    expect(stats.tourStats[0].shows).toHaveLength(4);
+    expect(stats.tourStats[0].shows.filter(s => s.attended).map(s => s.id)).toEqual([data.shows[1].id]);
+    expect(stats.tourStats[0].rate).toBe(0.25);
+  });
+  it("filters the travel-map source to the selected year without changing all-period data", () => {
+    const data = trialDataset();
+    const older = data.shows[0];
+    const newer = {...data.shows[1], id:"another-year", date:"2027-06-10", region:"大阪"};
+    data.shows.push(newer);
+    const mine = [older, newer];
+    const year = selectAttendancePeriod(data, mine, "2027");
+    expect(year.shows.map(s => s.id)).toEqual(["another-year"]);
+    expect(year.stats.prefectures).toEqual([["大阪府",1]]);
+    expect(year.allStats.prefectures).toEqual([["大阪府",1],["東京都",1]]);
+    expect(selectAttendancePeriod(data, mine, "all").shows).toHaveLength(2);
+  });
+  it("does not guess a prefecture from a city or unknown region", () => {
+    const data = trialDataset();
+    const show = {...data.shows[0], region:"名古屋"};
+    const stats = attendanceStats(data, [show]);
+    expect(stats.unknownPrefectures).toBe(1);
+    expect(stats.prefectures).toEqual([]);
   });
   it("uses only saved setlists as the performance-rate denominator", () => {
     const data = trialDataset();
