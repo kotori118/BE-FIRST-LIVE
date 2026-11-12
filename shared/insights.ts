@@ -103,6 +103,15 @@ export function songArchive(data: Dataset, shows: Show[], ref: string) {
   };
 }
 
+/** Rare songs: only performed songs in the selected scope.
+ * Unknown setlists never become a zero-performance observation.
+ * Equal rates use the song reference as a stable tie-breaker.
+ */
+export function rareSongRanking<T extends { songRef: string; shows: number; rate: number | null }>(songs: readonly T[]): T[] {
+  return songs.filter(song => song.shows > 0 && song.rate !== null)
+    .sort((a,b) => (a.rate! - b.rate!) || a.shows - b.shows || a.songRef.localeCompare(b.songRef));
+}
+
 /** Local-only CSV export. No network request or public data publication. */
 export function exportShowsCsv(data: Dataset): string {
   const quote = (v: unknown) => '"' + String(v ?? "").replaceAll('"', '""') + '"';
