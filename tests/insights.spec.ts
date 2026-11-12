@@ -1,8 +1,27 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
+  it("interleaves standalone shows with tour accordions by latest show date", () => {
+    const data = trialDataset();
+    const single2026 = {...data.shows[0],id:"single-2026",tourId:null,date:"2026-03-20",name:"2026 special"};
+    const single2023 = {...data.shows[0],id:"single-2023",tourId:null,date:"2023-05-01",name:"2023 special"};
+    const single2021 = {...data.shows[0],id:"single-2021",tourId:null,date:"2021-01-01",name:"2021 special"};
+    data.shows.push(single2026,single2023,single2021);
+    const before = JSON.stringify(data);
+    const timeline = allLiveTimeline(data,data.shows);
+    expect(timeline.map(x=>x.key)).toEqual(["show:single-2026","tour:dome-2024","show:single-2023","show:single-2021"]);
+    expect(timeline[1].kind).toBe("tour");
+    if (timeline[1].kind === "tour") {
+      expect(timeline[1].shows).toHaveLength(4);
+      expect(timeline[1].date).toBe("2024-04-21");
+    }
+    expect(JSON.stringify(data)).toBe(before);
+    const filtered = allLiveTimeline(data,[data.shows[0],single2026]);
+    expect(filtered.map(x=>x.key)).toEqual(["show:single-2026","tour:dome-2024"]);
+    expect(filtered[1].kind === "tour" && filtered[1].shows).toHaveLength(1);
+  });
   it("uses the Japan calendar date even when the device timezone differs", () => {
     expect(japanToday(new Date("2026-11-11T15:30:00Z"))).toBe("2026-11-12");
     expect(japanToday(new Date("2026-11-11T14:30:00Z"))).toBe("2026-11-11");
