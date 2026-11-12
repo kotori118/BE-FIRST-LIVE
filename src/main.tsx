@@ -108,6 +108,8 @@ function App() {
     [trialImport, setTrialImport] = useState<{data:Dataset;songs:Song[]|null} | null>(null),
     [trialLoaded, setTrialLoaded] = useState(false),
     [importAudit, setImportAudit] = useState<Dataset | null>(null),
+    [importAuditHash, setImportAuditHash] = useState(""),
+    [importApproval, setImportApproval] = useState(""),
     [libraryDirty, setLibraryDirty] = useState(false),
     [draftConflicted, setDraftConflicted] = useState(false);
   const stateRef = useRef(state),
@@ -1324,7 +1326,12 @@ function App() {
                         const file = e.target.files?.[0];
                         if (file) void run(async () => {
                           if (file.size > 8000000) throw new Error("8MBを超えるJSONです");
-                          const raw = JSON.parse(await file.text());
+                          const rawText = await file.text();
+                          const raw = JSON.parse(rawText);
+                          const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawText));
+                          const hash = Array.from(new Uint8Array(hashBytes), b => b.toString(16).padStart(2,"0")).join("");
+                          setImportAuditHash(hash);
+                          setImportApproval("");
                           setImportAudit(parseBackup(JSON.stringify(raw.data ?? raw)));
                         });
                         e.target.value = "";
@@ -1332,6 +1339,12 @@ function App() {
                   </label>
                   {importAudit && (() => {
                     const result = initialImportPreflight(data, importAudit, state.songs);
+                    const exactFile = importAuditHash === "fa567623a9695c0f71b1ed51ee32ab9dfc571674821660396297c299e883f31c";
+                    const existingEmpty = Object.values(data).every(v => !Array.isArray(v) || v.length === 0);
+                    const safeToImport = !preview && !busy && !dirty && online && exactFile &&
+                      existingEmpty && result.newShows === 130 && result.incomingSetlists === 122 &&
+                      !result.requiresManualReconciliation && result.unresolvedUniverseRefs.length === 0 &&
+                      result.universeCatalogProvided && importAudit.attendance.length === 0;
                     return (
                       <div className="restore">
                         <h3>本番登録前の差分チェック</h3>
@@ -1357,7 +1370,33 @@ function App() {
                           : "重複候補は見つかりませんでした。ただし、実際の登録は別途バックアップと承認が必要です。"}</p>
                         <div className="actions">
                           <button onClick={() => download("BE_LIVE_import_preflight.json", JSON.stringify(result, null, 2))}><Download size={15}/> 差分監査結果を保存</button>
-                          <button onClick={() => setImportAudit(null)}>閉じる</button>
+                          <button onClick={() => {setImportAudit(null);setImportApproval("");setImportAuditHash("");}}>閉じる</button>
+                        </div>
+                        <div className="trial-import-preview">
+                          <h3>初期データを本番に登録</h3>
+                          <p>専用の初期登録処理です。現在のデータが完全に空で、承認済みJSONと一致するときだけ実行できます。登録直前にもFirestoreを再照合し、競合があれば登録しません。</p>
+                          <p>{exactFile ? "✓ 2026-11-12最終版JSONと一致" : "最終版JSONではないため登録不可（差分監査だけ利用できます）"}</p>
+                          {!existingEmpty && <p className="error">既にLIVEデータがあります。既存情報を保護するため初期登録はできません。</p>}
+                          {result.unresolvedUniverseRefs.length>0 && <p className="error">Universe曲の未照合IDがあるため登録できません。</p>}
+                          <label>内容を確認したら「初期登録を承認」と入力
+                            <input aria-label="初期登録の確認入力" disabled={!safeToImport}
+                              value={importApproval} onChange={e=>setImportApproval(e.target.value)} placeholder="初期登録を承認"/>
+                          </label>
+                          <button className="primary" disabled={!safeToImport || importApproval !== "初期登録を承認"}
+                            onClick={()=>void run(async()=>{
+                              if (!confirm("確認済みの130公演・122セトリをFirestoreに初期登録します。実行しますか？")) return;
+                              const confirmed = await invoke<{ok:boolean;shows:number;setlists:number}>("importInitialArchive",{
+                                data:importAudit,
+                                expected:{datasetId:state.control.activeDatasetId,revision:state.control.revision},
+                                confirmed:true,
+                                confirmationText:importApproval,
+                              });
+                              if(!confirmed.ok) throw new Error("初期登録の応答を確認できませんでした");
+                              setImportAudit(null);setImportApproval("");setImportAuditHash("");
+                              await refresh();
+                            })}
+                          >130公演の初期登録を実行</button>
+                          <p className="muted">※試験モードでは実行不可。バックアップは別に保管し、最終承認後にだけ操作してね。</p>
                         </div>
                       </div>
                     );
