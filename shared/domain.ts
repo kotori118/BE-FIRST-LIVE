@@ -207,6 +207,76 @@ export function importPreview(current: Dataset, incoming: Dataset) {
   });
   return { shows, duplicates };
 }
+/**
+ * Read-only historical import audit. It never merges, deletes or writes data.
+ * Show identity and entity IDs are both checked: matching dates are not enough
+ * to conclude that existing setlists or attendance can be overwritten.
+ */
+export function initialImportPreflight(currentInput: Dataset, incomingInput: Dataset, universeSongs: Song[] = []) {
+  const current = validateDataset(currentInput);
+  const incoming = validateDataset(incomingInput);
+  const existingById = new Map(current.shows.map(s => [s.id, s]));
+  const existingByIdentity = new Map(current.shows.map(s => [showIdentity(s), s]));
+  const showOverlaps: { incomingId: string; currentId: string; date: string; venue: string; currentHasSetlist: boolean; incomingHasSetlist: boolean; kind: "ID" | "DATE_VENUE_SLOT" }[] = [];
+  const newShows: Show[] = [];
+  const unsafeShowIds: { incomingId: string; currentId: string; date: string; venue: string }[] = [];
+  for (const s of incoming.shows) {
+    const byId = existingById.get(s.id);
+    const byIdentity = existingByIdentity.get(showIdentity(s));
+    if (byId && showIdentity(byId) !== showIdentity(s)) {
+      unsafeShowIds.push({ incomingId: s.id, currentId: byId.id, date: s.date, venue: s.venue });
+    }
+    const match = byId ?? byIdentity;
+    if (match) showOverlaps.push({
+      incomingId: s.id, currentId: match.id, date: s.date, venue: s.venue,
+      currentHasSetlist: match.hasSavedSetlist, incomingHasSetlist: s.hasSavedSetlist,
+      kind: byId ? "ID" : "DATE_VENUE_SLOT",
+    });
+    else newShows.push(s);
+  }
+  const entityIdConflicts: { collection: Collection; id: string }[] = [];
+  for (const c of collections) {
+    const existing = new Map(current[c].map(x => [x.id, x]));
+    for (const e of incoming[c]) {
+      const old = existing.get(e.id);
+      if (old && JSON.stringify({ ...old, revision: 0 }) !== JSON.stringify({ ...e, revision: 0 }))
+        entityIdConflicts.push({ collection: c, id: e.id });
+    }
+  }
+  const titleKey = (v: string) => v.normalize("NFKC").replace(/\\s+/g, "").toLocaleLowerCase();
+  const currentLocal = new Map(current.localSongs.map(s => [titleKey(s.title), s]));
+  const matchingLocalSongs = incoming.localSongs
+    .filter(s => currentLocal.has(titleKey(s.title)))
+    .map(s => ({ incomingId: s.id, currentId: currentLocal.get(titleKey(s.title))!.id, title: s.title }));
+  const currentTours = new Map(current.tours.map(t => [titleKey(t.name), t]));
+  const matchingTours = incoming.tours
+    .filter(t => currentTours.has(titleKey(t.name)))
+    .map(t => ({ incomingId: t.id, currentId: currentTours.get(titleKey(t.name))!.id, name: t.name }));
+  const knownRefs = new Set(universeSongs.map(s => s.ref));
+  const referenced = new Set<string>();
+  for (const show of incoming.shows) {
+    for (const entry of effectiveEntries(incoming, show) ?? []) {
+      if (entry.songRef.startsWith("U:")) referenced.add(entry.songRef);
+    }
+  }
+  return {
+    incomingShows: incoming.shows.length,
+    newShows: newShows.length,
+    newShowIds: newShows.map(s => s.id),
+    showOverlaps,
+    unsafeShowIds,
+    entityIdConflicts,
+    matchingLocalSongs,
+    matchingTours,
+    existingAttendance: current.attendance.length,
+    existingAttended: current.attendance.filter(a => a.attended).length,
+    incomingSetlists: incoming.shows.filter(s => s.hasSavedSetlist).length,
+    unresolvedUniverseRefs: universeSongs.length ? [...referenced].filter(ref => !knownRefs.has(ref)).sort() : [],
+    universeCatalogProvided: universeSongs.length > 0,
+    requiresManualReconciliation: showOverlaps.length > 0 || unsafeShowIds.length > 0 ||
+      entityIdConflicts.length > 0 || matchingLocalSongs.length > 0 || matchingTours.length > 0,
+  };
+}
 export function templateImpact(
   data: Dataset,
   template: Dataset["templates"][number],
