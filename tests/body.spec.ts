@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import {
   analyze,
+  compareSetlistSongs,
   effectiveEntries,
   deriveOverrides,
   validateDataset,
@@ -51,6 +52,16 @@ describe("v0.24 setlists and analytics", () => {
       short: 1,
       rate: 1,
     });
+  });
+  it("hides empty comparisons, ignores games and deduplicates repeated performances", () => {
+    const d = trialDataset();
+    const a = d.templates[0].entries[0];
+    const b = d.templates[0].entries[1];
+    const current = [a, { ...a, id: "repeat" }, { ...b, id: "game", countsAsPerformance: false, arrangement: "ARRANGED" as const }];
+    const other = [a, { ...b, id: "new" }];
+    expect(compareSetlistSongs(current, [a])).toEqual({ currentOnly: [], otherOnly: [] });
+    expect(compareSetlistSongs(current, other)).toEqual({ currentOnly: [], otherOnly: [b.songRef] });
+    expect(compareSetlistSongs(other, current)).toEqual({ currentOnly: [b.songRef], otherOnly: [] });
   });
   it("treats normal and arranged songs as one track while excluding only non-performance corners", () => {
     const d = trialDataset();
