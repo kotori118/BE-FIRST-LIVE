@@ -1,8 +1,66 @@
 import { describe, it, expect } from "vitest";
 import { trialDataset } from "../fixtures/dome2024";
-import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, groupedTourSetlistDifferences, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { attendanceStats, prefecture, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, groupedTourSetlistDifferences, compareDetailedSetlists, selectAttendancePeriod, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 describe("BE:LIVE insights", () => {
+
+  it("compares actual order, encore, versions, medley and duplicate performances without counting games", () => {
+    const data = trialDataset();
+    const currentShow = data.shows[1];
+    const otherShow = {...data.shows[0],hasSavedSetlist:true,templateId:null};
+    data.shows = [currentShow,otherShow];
+    const [a,b,c,d] = data.templates[0].entries.slice(0,4);
+    data.templates[0].entries = [a,b,c,d];
+    data.directEntries = [{
+      id:"comparison-entries",revision:0,showId:otherShow.id,
+      entries:[
+        {...b,id:"b-other",section:"ENCORE",version:"SHORT",medleyGroup:"medley-1",arrangement:"ARRANGED"},
+        {...a,id:"a-other"},
+        {...c,id:"c-other"},
+        {...c,id:"c-again"},
+        {...d,id:"game-corner",countsAsPerformance:false},
+      ],
+    }];
+    const snapshot = JSON.stringify(data);
+    const result = compareDetailedSetlists(data,currentShow,otherShow)!;
+    expect(result.current).toHaveLength(4);
+    expect(result.other).toHaveLength(4);
+    expect(result.removed.map(x=>x.songRef)).toEqual([d.songRef]);
+    expect(result.added.map(x=>x.songRef)).toEqual([c.songRef]);
+    expect(result.added[0].position).toBe(4);
+    expect(result.reordered.map(x=>[x.from.songRef,x.from.position,x.to.position]))
+      .toEqual([[a.songRef,1,2],[b.songRef,2,1]]);
+    expect(result.sectionChanges.map(x=>x.from.songRef)).toEqual([b.songRef]);
+    expect(result.versionChanges.map(x=>x.from.songRef)).toEqual([b.songRef]);
+    expect(result.medleyChanges.map(x=>x.from.songRef)).toEqual([b.songRef]);
+    expect(result.arrangementChanges.map(x=>x.from.songRef)).toEqual([b.songRef]);
+    expect(result.identical).toBe(false);
+    expect(JSON.stringify(data)).toBe(snapshot);
+  });
+  it("does not call an insertion-induced position shift a reordered song", () => {
+    const data = trialDataset();
+    const currentShow = data.shows[1];
+    const otherShow = {...data.shows[0],hasSavedSetlist:true,templateId:null};
+    const [a,b,c,d] = data.templates[0].entries.slice(0,4);
+    data.templates[0].entries = [a,b,c];
+    data.directEntries = [{id:"comparison-entries",revision:0,showId:otherShow.id,
+      entries:[a,d,b,c]}];
+    const result = compareDetailedSetlists(data,currentShow,otherShow)!;
+    expect(result.added.map(x=>x.songRef)).toEqual([d.songRef]);
+    expect(result.reordered).toEqual([]);
+    expect(result.identical).toBe(false);
+  });
+  it("returns null for unknown setlists and treats matching saved setlists as identical", () => {
+    const data = trialDataset();
+    const currentShow = data.shows[1];
+    const otherShow = {...data.shows[0],hasSavedSetlist:true,templateId:"tokyo-0303"};
+    expect(compareDetailedSetlists(data,currentShow,data.shows[0])).toBeNull();
+    const same = compareDetailedSetlists(data,currentShow,otherShow)!;
+    expect(same.identical).toBe(true);
+    expect(same.current).toHaveLength(29);
+    expect(same.other).toHaveLength(29);
+  });
+
   it("collapses identical tour song differences across several shows", () => {
     const data = trialDataset();
     data.shows = data.shows.map(s=>({...s,hasSavedSetlist:true,templateId:"tokyo-0303"}));
