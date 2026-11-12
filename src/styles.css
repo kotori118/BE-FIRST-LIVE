@@ -857,3 +857,20 @@ nav button.active { color:#007f8b; }
 .live-stats-months { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .live-stats-month { display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px; background:#f3f9f8; border-radius:9px; padding:10px; font-size:12px; }
 .live-stats-month strong { color:#177d83; }
+
+/* MY LIVE STATS: year picker and twelve-month overview. */
+.live-stats-heading { gap:8px; flex-wrap:wrap; }
+.live-stats-period { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 15px; }
+.live-stats-period label { font-size:13px; color:var(--muted); }
+.live-stats-period select { width:auto; min-width:130px; min-height:42px; padding:8px 34px 8px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; color:#21494e; font-size:14px; }
+.live-stats-month-chart { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:5px; margin:15px 0 8px; }
+.live-stats-month-column { min-width:0; display:flex; flex-direction:column; align-items:center; gap:5px; }
+.live-stats-month-count { height:16px; font-size:11px; color:#286e73; }
+.live-stats-month-bar-area { height:100px; width:100%; display:flex; align-items:flex-end; justify-content:center; border-bottom:1px solid #dae9e9; }
+.live-stats-month-bar { width:min(100%,22px); background:linear-gradient(180deg,#47c6ba,#078b9c); border-radius:5px 5px 0 0; }
+.live-stats-month-column small { font-size:10px; color:var(--muted); }
+@media (max-width:480px) {
+  .live-stats-month-chart { gap:3px; }
+  .live-stats-month-bar-area { height:82px; }
+  .live-stats-month-column small { font-size:9px; }
+}
