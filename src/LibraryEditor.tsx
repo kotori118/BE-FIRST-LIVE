@@ -415,6 +415,9 @@ export function EntryEditor({
     songRef: song.ref,
     section: "MAIN",
     version: "FULL",
+    arrangement: "NORMAL",
+    countsAsPerformance: true,
+    note: "",
     medleyGroup: null,
     performance: song.ref.startsWith("L:") ? "OTHER" : "ORIGINAL",
     members: [],
@@ -571,6 +574,17 @@ export function EntryEditor({
               <option value="UNIT">ユニット</option>
               <option value="OTHER">その他</option>
             </select>
+            <select
+              aria-label="通常またはアレンジ"
+              value={e.arrangement ?? "NORMAL"}
+              onChange={(event) => {
+                const arrangement = event.target.value as Entry["arrangement"];
+                patch(e.id, { arrangement, ...(arrangement === "NORMAL" ? { countsAsPerformance: true } : {}) });
+              }}
+            >
+              <option value="NORMAL">通常</option>
+              <option value="ARRANGED">アレンジ</option>
+            </select>
             <button
               disabled={!i}
               aria-label="上へ"
@@ -600,6 +614,19 @@ export function EntryEditor({
               <X size={16} />
             </button>
           </div>
+          {e.arrangement === "ARRANGED" && (
+            <div className="entry-arrangement-options">
+              <label>アレンジのメモ
+                <input maxLength={4000} value={e.note ?? ""} placeholder="例：歌割り変更ゲーム、アコースティック"
+                  onChange={(event) => patch(e.id, { note: event.target.value })} />
+              </label>
+              <label className="inline-check">
+                <input type="checkbox" checked={e.countsAsPerformance !== false}
+                  onChange={(event) => patch(e.id, { countsAsPerformance: event.target.checked })} />
+                通常の披露回数に含める
+              </label>
+            </div>
+          )}
         </div>
       ))}
       <button className="entry-add-button" onClick={() => setAddOpen(v => !v)}><Plus size={17}/> 曲を追加</button>
