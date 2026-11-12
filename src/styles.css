@@ -937,3 +937,13 @@ nav button.active { color:#007f8b; }
 .track-flag-arranged,.track-flag-corner { display:inline-flex; align-items:center; width:max-content; border-radius:5px; padding:2px 6px; font-size:10px; font-weight:600; line-height:1.5; }
 .track-flag-arranged { color:#167e86; background:#dff5f2; }
 .track-flag-corner { color:#866c4a; background:#f8f0e3; }
+
+/* Initial attendance selection: same White Aqua Glass surface and type scale. */
+.bulk-attendance-panel { display:grid; gap:12px; }
+.bulk-attendance-list { max-height:440px; overflow-y:auto; border:1px solid var(--line); border-radius:14px; }
+.fields .bulk-attendance-row { display:flex; align-items:flex-start; gap:12px; padding:13px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+.fields .bulk-attendance-row:last-child { border-bottom:0; }
+.fields .bulk-attendance-row input[type="checkbox"] { width:19px; height:19px; flex-shrink:0; margin:2px 0 0; accent-color:#008b94; }
+.bulk-attendance-row span { display:grid; gap:4px; min-width:0; }
+.bulk-attendance-row strong { font-size:13px; font-weight:600; }
+.bulk-attendance-row small { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
