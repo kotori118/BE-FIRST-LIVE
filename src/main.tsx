@@ -53,7 +53,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, rareSongRanking, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -94,6 +94,9 @@ function App() {
     [toursExpanded, setToursExpanded] = useState(false),
     [songDetail, setSongDetail] = useState<string | null>(null),
     [rareOpen, setRareOpen] = useState(false),
+    [bulkAttendanceOpen, setBulkAttendanceOpen] = useState(false),
+    [bulkAttendanceIds, setBulkAttendanceIds] = useState<string[]>([]),
+    [bulkAttendanceQuery, setBulkAttendanceQuery] = useState(""),
     [attendanceEdit, setAttendanceEdit] = useState<{showId:string;attended:boolean;seat:string;note:string} | null>(null),
     [expanded, setExpanded] = useState<string | null>(
       sessionStorage.getItem("lastTour"),
@@ -242,6 +245,8 @@ function App() {
     setShowId(null);
     setSongDetail(null);
     setRareOpen(false);
+    setBulkAttendanceOpen(false);
+    setBulkAttendanceIds([]);
     setTab(next);
   };
   const refresh = async () => {
@@ -501,6 +506,10 @@ function App() {
                 !data.songMetadata.some((m) => m.songRef === s.songRef)))),
     ),
     rareStats = rareSongRanking(stats),
+    bulkCandidates = [...data.shows].filter(s => !data.attendance.some(a => a.showId === s.id && a.attended))
+      .sort((a,b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot)),
+    bulkVisible = bulkCandidates.filter(s => [s.date,s.venue,s.slot,data.tours.find(t=>t.id===s.tourId)?.name ?? s.name]
+      .some(x => x.toLowerCase().includes(bulkAttendanceQuery.trim().toLowerCase()))),
     searchShows = data.shows.filter((s) =>
       [
         s.date,
@@ -1335,6 +1344,49 @@ function App() {
             {tab === "SETTINGS" && (
               <>
                 <h1>設定</h1>
+                <section className="card fields">
+                  <h2>参戦履歴の初回一括登録</h2>
+                  <p>登録済みのライブから参戦した公演を選んで、一度に保存できます。既存の参戦記録・公演・セトリ・座席・感想は変更しません。</p>
+                  <p className="muted">保存前に下の「バックアップ」からJSONを書き出しておくと安心です。</p>
+                  <div className="stats-row"><span>現在の参戦登録</span><strong>{mine.length}公演</strong></div>
+                  <button disabled={busy || !online || preview || bulkCandidates.length === 0} onClick={() => {
+                    setBulkAttendanceOpen(!bulkAttendanceOpen);
+                    setBulkAttendanceIds([]);
+                    setBulkAttendanceQuery("");
+                  }}>{bulkAttendanceOpen ? "選択画面を閉じる" : "参戦した公演をまとめて選ぶ"}</button>
+                  {bulkCandidates.length === 0 && <p className="muted">すべての登録済み公演が参戦済みです。</p>}
+                  {bulkAttendanceOpen && (
+                    <div className="bulk-attendance-panel">
+                      <p className="muted">チェックした公演だけを追加します。未選択の公演は変更しません。</p>
+                      <input className="search" aria-label="一括参戦登録の公演検索" placeholder="日付・ツアー・会場・昼夜で検索" value={bulkAttendanceQuery} onChange={e=>setBulkAttendanceQuery(e.target.value)}/>
+                      <div className="actions">
+                        <button type="button" disabled={!bulkVisible.length} onClick={() => setBulkAttendanceIds(prev => [...new Set([...prev,...bulkVisible.map(s=>s.id)])])}>表示中の公演をすべて選択</button>
+                        <button type="button" disabled={!bulkAttendanceIds.length} onClick={() => setBulkAttendanceIds([])}>選択をすべて解除</button>
+                      </div>
+                      <p><strong>{bulkAttendanceIds.length}公演を選択中</strong> ／ 検索結果 {bulkVisible.length}公演</p>
+                      <div className="bulk-attendance-list">
+                        {bulkVisible.map(s => <label className="bulk-attendance-row" key={s.id}>
+                          <input type="checkbox" checked={bulkAttendanceIds.includes(s.id)}
+                            onChange={e=>setBulkAttendanceIds(prev=>e.target.checked ? [...prev,s.id] : prev.filter(id=>id!==s.id))}/>
+                          <span><strong>{s.date} · {s.slot}</strong><small>{data.tours.find(t=>t.id===s.tourId)?.name ?? s.name} · {s.venue}</small></span>
+                        </label>)}
+                        {!bulkVisible.length && <p className="muted">該当する公演はありません。</p>}
+                      </div>
+                      <button className="primary" disabled={!bulkAttendanceIds.length || busy || !online || preview || dirty}
+                        onClick={() => void run(async () => {
+                          if (!state || !bulkAttendanceIds.length) return;
+                          const selected = bulkAttendanceIds.filter(id => bulkCandidates.some(s=>s.id===id));
+                          if (selected.length !== bulkAttendanceIds.length) throw Error("参戦記録が更新されています。選択し直してください");
+                          if (!confirm(`${selected.length}公演を参戦済みとして一括登録します。公演・セトリ・既存の参戦記録は変更しません。よろしいですか？`)) return;
+                          const next = addAttendanceRecords(state.data,selected,new Date().toISOString());
+                          await atomicSave(next,state);
+                          setBulkAttendanceIds([]);
+                          setBulkAttendanceOpen(false);
+                          setBulkAttendanceQuery("");
+                        })}>選択した{bulkAttendanceIds.length}公演を一括登録</button>
+                    </div>
+                  )}
+                </section>
                 <section className="card fields">
                   <h2>歴代ライブの初期登録・差分監査</h2>
                   <p>現在のデータと初期登録JSONを比較して、重複公演・楽曲・既存参戦記録への影響を確認するよ。<strong>ここでは登録も上書きもしません。</strong> JSONはこの端末内だけで読み取ります。</p>
