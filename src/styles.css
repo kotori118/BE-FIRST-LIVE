@@ -874,3 +874,57 @@ nav button.active { color:#007f8b; }
   .live-stats-month-bar-area { height:82px; }
   .live-stats-month-column small { font-size:9px; }
 }
+
+/* MY LIVE STATS — tours, venues and travel cartogram */
+.live-stats-section-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+.live-stats-section-head h2,.live-stats-section-head h3 { margin-bottom:5px; }
+.live-stats-section-head > span { white-space:nowrap; font-size:12px; color:var(--muted); }
+.live-stats-progress-track { display:block; width:100%; height:7px; border-radius:99px; background:#e8f2f2; overflow:hidden; }
+.live-stats-progress-track > span { display:block; height:100%; background:linear-gradient(90deg,#5ed1c0,#168e9d); border-radius:99px; }
+.live-stats-tour { margin:0; border-bottom:1px solid var(--line); }
+.live-stats-tour summary { display:flex; align-items:center; gap:12px; justify-content:space-between; padding:16px 0; list-style:none; }
+.live-stats-tour summary::-webkit-details-marker { display:none; }
+.live-stats-tour-summary { display:grid; gap:10px; flex:1; min-width:0; }
+.live-stats-tour-summary strong { font-size:14px; font-weight:600; overflow-wrap:anywhere; }
+.live-stats-tour-rate { display:grid; gap:2px; min-width:60px; text-align:right; }
+.live-stats-tour-rate strong { font-size:17px; white-space:nowrap; }
+.live-stats-tour-rate small { font-size:12px; color:#188994; }
+.live-stats-tour-shows { background:#f6faf9; border-radius:10px; margin-bottom:13px; padding:5px 11px; }
+.live-stats-tour-show { display:flex; align-items:center; gap:8px; width:100%; padding:11px 0; min-height:42px; text-align:left; border:0; border-bottom:1px solid #e4eded; background:transparent; font-size:12px; color:#24474b; }
+.live-stats-tour-show:last-child { border-bottom:0; }
+.live-stats-tour-show > span:last-child { overflow-wrap:anywhere; }
+.live-stats-attended { color:#078d91; flex:none; }
+.live-stats-not-attended { color:#a2b5b7; flex:none; width:14px; text-align:center; }
+.live-stats-more { width:100%; border:0; background:transparent; color:#168b94; font-size:13px; padding:13px 0; margin-top:8px; }
+.live-stats-venue { display:flex; align-items:center; gap:14px; padding:13px 0; }
+.live-stats-venue-rank { font-family:Outfit,sans-serif; font-size:19px; color:#93afb1; width:28px; flex:none; }
+.live-stats-venue-body { flex:1; min-width:0; display:grid; gap:10px; }
+.live-stats-venue-title { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.live-stats-venue-title strong { font-size:14px; overflow-wrap:anywhere; }
+.live-stats-venue-title span { white-space:nowrap; font-size:12px; color:#288c93; }
+.travel-map-wrap { display:flex; justify-content:center; padding:8px 0 2px; }
+.travel-map { display:grid; grid-template-columns:repeat(11,minmax(0,1fr)); grid-template-rows:repeat(19,22px); width:min(100%,330px); gap:2px; }
+.travel-map-tile { min-width:0; min-height:0; width:100%; height:100%; border:1px solid #e0eaea; border-radius:5px; padding:0; font-size:10px; font-weight:500; line-height:1; cursor:pointer; }
+.travel-map-tile.level-0 { background:#f0f5f5; color:#9eb1b3; }
+.travel-map-tile.level-1 { background:#a4e8dd; border-color:#7bd4c8; color:#194e53; }
+.travel-map-tile.level-2 { background:#4dbfbd; border-color:#35a9b1; color:#fff; }
+.travel-map-tile.level-3 { background:#087e90; border-color:#087e90; color:#fff; }
+.travel-map-tile.is-selected { outline:2px solid #114f5a; outline-offset:1px; }
+.travel-map-tile:focus-visible { outline:2px solid #114f5a; outline-offset:2px; }
+.travel-map-legend { display:flex; flex-wrap:wrap; gap:8px 13px; margin:12px 0 4px; font-size:11px; color:var(--muted); }
+.travel-map-legend span { display:inline-flex; align-items:center; gap:5px; }
+.travel-map-legend i { width:12px; height:12px; display:inline-block; border-radius:3px; }
+.travel-map-legend i.level-0 { background:#f0f5f5; border:1px solid #e0eaea; }
+.travel-map-legend i.level-1 { background:#a4e8dd; }
+.travel-map-legend i.level-2 { background:#4dbfbd; }
+.travel-map-legend i.level-3 { background:#087e90; }
+.travel-map-caption { font-size:11px; color:var(--muted); }
+.travel-map-detail { margin-top:16px; padding:15px; border-radius:13px; background:#f5faf9; }
+.travel-map-detail h3 { font-size:16px; }
+.travel-map-shows { max-height:240px; overflow:auto; }
+.travel-map-show { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; text-align:left; border:0; border-bottom:1px solid #e1eceb; background:transparent; padding:12px 0; font-size:12px; color:#24474b; }
+.travel-map-show:last-child { border-bottom:0; }
+@media (max-width:480px) {
+  .travel-map { grid-template-rows:repeat(19,20px); gap:2px; }
+  .travel-map-tile { font-size:9px; border-radius:4px; }
+}
