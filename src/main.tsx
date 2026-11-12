@@ -103,7 +103,7 @@ function App() {
       facts: Dataset["entryFacts"];
     } | null>(null),
     [backup, setBackup] = useState<Dataset | null>(null),
-    [trialImport, setTrialImport] = useState<Dataset | null>(null),
+    [trialImport, setTrialImport] = useState<{data:Dataset;songs:Song[]|null} | null>(null),
     [trialLoaded, setTrialLoaded] = useState(false),
     [libraryDirty, setLibraryDirty] = useState(false),
     [draftConflicted, setDraftConflicted] = useState(false);
@@ -1324,6 +1324,7 @@ function App() {
                 {preview && (
                   <section className="card fields trial-import">
                     <h2>初期データの試験読み込み</h2>
+                    <p>曲名表示まで検証するなら「試験表示用データ（JSON）」を選んでね。通常の初期登録JSONも読み込めます。</p>
                     <p>この画面は試験専用。読み込んだ内容はブラウザーのメモリ内だけで表示し、Firestoreには一切送信しません。再読み込みでサンプルに戻ります。</p>
                     <label className="file-button">
                       <Upload size={16} /> 初期登録用JSONを選ぶ
@@ -1332,28 +1333,41 @@ function App() {
                           const file = e.target.files?.[0];
                           if (file) void run(async () => {
                             if (file.size > 8000000) throw new Error("8MBを超えるJSONです");
-                            setTrialImport(parseBackup(await file.text()));
+                            const raw = JSON.parse(await file.text());
+                            const data = parseBackup(JSON.stringify(raw.data ?? raw));
+                            let songs: Song[] | null = null;
+                            if (raw.data && raw.songs !== undefined) {
+                              if (!Array.isArray(raw.songs) || raw.songs.some((x: unknown) =>
+                                !x || typeof x !== "object" || typeof (x as Song).ref !== "string" ||
+                                !/^[UL]:[A-Za-z0-9_-]{1,120}$/.test((x as Song).ref) ||
+                                typeof (x as Song).title !== "string" ||
+                                typeof (x as Song).available !== "boolean"))
+                                throw new Error("試験用楽曲一覧の形式が正しくありません");
+                              songs = raw.songs as Song[];
+                            }
+                            setTrialImport({data,songs});
                           });
                           e.target.value = "";
                         }} />
                     </label>
                     {trialImport && (() => {
-                      const withSetlist = trialImport.shows.filter(s => s.hasSavedSetlist);
-                      const rows = withSetlist.flatMap(s => effectiveEntries(trialImport, s) ?? []);
+                      const withSetlist = trialImport.data.shows.filter(s => s.hasSavedSetlist);
+                      const rows = withSetlist.flatMap(s => effectiveEntries(trialImport.data, s) ?? []);
                       const games = rows.filter(e => e.arrangement === "ARRANGED" && !isCountedPerformance(e));
                       return (
                         <div className="restore trial-import-preview">
                           <h3>検証用データの内容</h3>
-                          <div className="stats-row"><span>公演</span><strong>{trialImport.shows.length}件</strong></div>
+                          <div className="stats-row"><span>公演</span><strong>{trialImport.data.shows.length}件</strong></div>
                           <div className="stats-row"><span>セトリ登録済み</span><strong>{withSetlist.length}公演</strong></div>
                           <div className="stats-row"><span>セトリ表示行</span><strong>{rows.length}件</strong></div>
                           <div className="stats-row"><span>通常の披露回数に含める行</span><strong>{rows.filter(isCountedPerformance).length}件</strong></div>
                           <div className="stats-row"><span>アレンジ・披露集計対象外</span><strong>{games.length}件</strong></div>
-                          <div className="stats-row"><span>セトリ未登録</span><strong>{trialImport.shows.length - withSetlist.length}公演</strong></div>
+                          <div className="stats-row"><span>曲名表示用データ</span><strong>{trialImport.songs?.length ?? 0}曲</strong></div>
+                          <div className="stats-row"><span>セトリ未登録</span><strong>{trialImport.data.shows.length - withSetlist.length}公演</strong></div>
                           <p>読み込み後は「ALL LIVE」から全公演・曲順・歌割り変更ゲームを確認できるよ。試験モードでの変更は本番に反映されません。</p>
                           <div className="actions">
                             <button className="primary" disabled={busy} onClick={() => {
-                              setState({ ...stateRef.current!, data: copy(trialImport), control: {
+                              setState({ ...stateRef.current!, data: copy(trialImport.data), songs: trialImport.songs ? copy(trialImport.songs) : stateRef.current!.songs, control: {
                                 ...stateRef.current!.control, revision: stateRef.current!.control.revision + 1,
                               }});
                               setTrialLoaded(true);
