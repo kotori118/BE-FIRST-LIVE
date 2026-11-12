@@ -10,6 +10,8 @@ export class Conflict extends Error {}
 function assert(ok: unknown, message: string): asserts ok {
   if (!ok) throw new Error(message);
 }
+/** An arranged song still counts unless explicitly marked as a non-performance corner. */
+export const isCountedPerformance = (entry: Entry) => entry.countsAsPerformance !== false;
 export function medley(entry: Entry, group: string | null): Entry {
   return {
     ...entry,
@@ -257,6 +259,9 @@ export function deriveOverrides(
         "medleyGroup",
         "performance",
         "members",
+        "arrangement",
+        "countsAsPerformance",
+        "note",
       ] as const)
         if (JSON.stringify(old[key]) !== JSON.stringify(e[key]))
           Object.assign(patch, { [key]: e[key] });
@@ -301,6 +306,7 @@ export function analyze(data: Dataset, shows: Show[]) {
     denominator++;
     const seen = new Set<string>();
     for (const e of entries) {
+      if (!isCountedPerformance(e)) continue;
       const c = counts.get(e.songRef) ?? {
         songRef: e.songRef,
         shows: 0,
