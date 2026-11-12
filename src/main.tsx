@@ -53,7 +53,7 @@ import {
 import { trialDataset, trialSongs } from "../fixtures/dome2024";
 import "./styles.css";
 import { LibraryEditor, EntryEditor } from "./LibraryEditor";
-import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
+import { selectAttendancePeriod, songArchive, rareSongRanking, addAttendanceRecords, splitAttendanceByDate, japanToday, firstHeardSongs, allLiveTimeline, exportShowsCsv, prefecture, JAPAN_PREFECTURE_LAYOUT } from "../shared/insights";
 
 const preview = import.meta.env.VITE_PREVIEW === "true" || new URLSearchParams(location.search).get("trial")==="1";
 const fixture: State = {
@@ -1309,16 +1309,21 @@ function App() {
                 ) : (
                   <>
                     <input className="search" aria-label="公演を検索" placeholder="ツアー名・日付・会場で検索" value={query} onChange={(e) => setQuery(e.target.value)}/>
-                    {[...data.tours].sort((a,b) => b.startDate.localeCompare(a.startDate)).map(t => {
-                      const list = searchShows.filter(s => s.tourId === t.id);
-                      return list.length ? <section className="card tour" key={t.id}>
-                        <button className="tour-title" aria-expanded={expanded === t.id} onClick={() => {const next = expanded === t.id ? null : t.id;setExpanded(next);if(next)sessionStorage.setItem("lastTour",next);}}>
-                          <span><span className="eyebrow">{t.startDate.slice(0,4)} · {list.length}公演</span><strong>{t.name}</strong></span><span>{expanded === t.id ? "−" : "＋"}</span>
+                    {allLiveTimeline(data,searchShows).map(item => item.kind === "tour" ? (
+                      <section className="card tour" key={item.key}>
+                        <button className="tour-title" aria-expanded={expanded === item.tour.id} onClick={() => {
+                          const next = expanded === item.tour.id ? null : item.tour.id;
+                          setExpanded(next);
+                          if(next) sessionStorage.setItem("lastTour",next);
+                        }}>
+                          <span><span className="eyebrow">{item.tour.startDate.slice(0,4)} · {item.shows.length}公演</span><strong>{item.tour.name}</strong></span>
+                          <span>{expanded === item.tour.id ? "−" : "＋"}</span>
                         </button>
-                        {expanded === t.id && [...list].sort((a,b)=>a.date.localeCompare(b.date)).map(s => <ShowCard key={s.id} s={s}/>)}
-                      </section> : null;
-                    })}
-                    {searchShows.filter(s => !s.tourId).sort((a,b)=>b.date.localeCompare(a.date)).map(s => <section className="card" key={s.id}><ShowCard s={s}/></section>)}
+                        {expanded === item.tour.id && item.shows.map(s=><ShowCard key={s.id} s={s}/>)}
+                      </section>
+                    ) : (
+                      <section className="card" key={item.key}><ShowCard s={item.show}/></section>
+                    ))}
                     {!searchShows.length && <p className="empty">公演がありません</p>}
                   </>
                 )}
