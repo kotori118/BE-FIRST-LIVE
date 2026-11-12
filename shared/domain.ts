@@ -12,6 +12,16 @@ function assert(ok: unknown, message: string): asserts ok {
 }
 /** An arranged song still counts unless explicitly marked as a non-performance corner. */
 export const isCountedPerformance = (entry: Entry) => entry.countsAsPerformance !== false;
+/** Compare only performed songs, not MC/game corners or duplicate plays. */
+export function compareSetlistSongs(current: Entry[], other: Entry[]) {
+  const currentRefs = new Set(current.filter(isCountedPerformance).map(e => e.songRef));
+  const otherRefs = new Set(other.filter(isCountedPerformance).map(e => e.songRef));
+  return {
+    currentOnly: [...currentRefs].filter(ref => !otherRefs.has(ref)),
+    otherOnly: [...otherRefs].filter(ref => !currentRefs.has(ref)),
+  };
+}
+
 export function medley(entry: Entry, group: string | null): Entry {
   return {
     ...entry,
