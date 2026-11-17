@@ -79,7 +79,7 @@ function emulatorRuntime(){
     UrlFetchApp:{fetch:(url,options)=>{
       if(url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/')) {
         assert.equal(options.method,'get');assert.equal(options.payload,undefined);
-        assert.ok(decodeURIComponent(url).includes("'06_Songs'!A1:G10000"));
+        assert.ok(decodeURIComponent(url).includes("'06_Songs'!A1:J10000"));
         return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({values:rows})};
       }
       assert.ok(url.startsWith('https://firestore.googleapis.com/v1/projects/demo-live-connection/'));
