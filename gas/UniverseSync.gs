@@ -1,6 +1,6 @@
 /** Standalone LIVE script. Never add this file to the existing Universe GAS project. */
 var LiveSongSyncCore = (function () {
-  var COLUMNS = ['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack'];
+  var COLUMNS = ['SongID','Title','ReleaseDate','Form','CDTitle','IsTitleTrack'];
   var FIELDS = ['songRef','universeSongId','title','artist','releaseDate','form','cdTitle','isTitleTrack','available'];
   function fail(message) { var e = new Error(message); e.code = 'SOURCE_INVALID'; throw e; }
   function text(value) { return String(value == null ? '' : value).trim(); }
@@ -8,17 +8,20 @@ var LiveSongSyncCore = (function () {
     if (!rows.length) fail('06_Songsが空です');
     var header = rows[0].map(text), seen = Object.create(null), songs = [];
     COLUMNS.forEach(function (key) { if (header.filter(function (h) { return h === key; }).length !== 1) fail('必須列がないか重複しています: ' + key); });
+    var artistColumn = header.indexOf('ArtistID') >= 0 ? 'ArtistID' : 'Artist';
+    if (header.filter(function (h) { return h === artistColumn; }).length !== 1) fail('アーティスト列がないか重複しています');
     rows.slice(1).forEach(function (row) {
       if (row.every(function (v) { return !text(v); })) return;
       function get(key) { return text(row[header.indexOf(key)]); }
-      // Only this exact Artist is part of the LIVE catalog, including internal units.
-      if (get('Artist') !== 'BE:FIRST') return;
+      // Preserve the existing name in Firestore while selecting by the canonical ID.
+      if (artistColumn === 'ArtistID' ? get('ArtistID') !== 'G1' :
+          get('Artist') !== 'BE:FIRST' || get('SongType') === 'SOLO' || /^M\d+$/.test(get('ArtistRef'))) return;
       var id = get('SongID'), title = get('Title'), date = get('ReleaseDate').replace(/\//g,'-'), flag = get('IsTitleTrack').toUpperCase();
       if (!/^[A-Za-z0-9_-]{1,120}$/.test(id) || !title || Object.prototype.hasOwnProperty.call(seen,id)) fail('SongIDが不正または重複しています: ' + id);
       if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0,10) !== date)) fail('発売日が不正です: ' + id);
       if (['','TRUE','FALSE'].indexOf(flag) < 0) fail('IsTitleTrackが不正です: ' + id);
       seen[id] = true;
-      songs.push({songRef:'U:'+id,universeSongId:id,title:title,artist:get('Artist')||null,releaseDate:date||null,form:get('Form')||null,cdTitle:get('CDTitle')||null,isTitleTrack:flag==='TRUE',available:true});
+      songs.push({songRef:'U:'+id,universeSongId:id,title:title,artist:'BE:FIRST',releaseDate:date||null,form:get('Form')||null,cdTitle:get('CDTitle')||null,isTitleTrack:flag==='TRUE',available:true});
     });
     if (!songs.length) fail('BE:FIRST名義の楽曲が0件です。前回の正常データを保持します');
     return songs;
@@ -110,7 +113,7 @@ function liveRequest_(method,path,body,allowMissing) {
 function liveRows_(cfg) {
   // SpreadsheetApp.openById requires the broader spreadsheets scope.
   // Sheets values.get supports spreadsheets.readonly, so the source stays read-only.
-  var url = 'https://sheets.googleapis.com/v4/spreadsheets/'+cfg.spreadsheet+'/values/'+encodeURIComponent("'06_Songs'!A1:G10000")+'?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS';
+  var url = 'https://sheets.googleapis.com/v4/spreadsheets/'+cfg.spreadsheet+'/values/'+encodeURIComponent("'06_Songs'!A1:J10000")+'?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS';
   var response = liveGoogleRequest_('get',url,null,false,'Sheets API');
   var rows = response.values || [];
   if (rows.length >= 10000) throw new Error('06_Songsの取得上限に達しました。切り詰めたデータは同期しません');

@@ -15,6 +15,16 @@ test('source normalization: stable IDs, slash dates, boolean false; only BE:FIRS
   assert.equal(songs.length,1);assert.equal(songs[0].releaseDate,'2026-11-03');assert.equal(songs[0].isTitleTrack,false);
   assert.equal(songs[0].songRef,'U:1001');
 });
+test('only G1 syncs after the ArtistID cutover; old solo records are excluded during rollout',()=>{
+  const c=core(), typed=[...header];typed[2]='ArtistID';
+  const group=[...row];group[2]='G1';
+  const personal=['1068','Personal','M102','','','','FALSE'];
+  const unit=['5001','Unassigned unit','U17','','','','FALSE'];
+  assert.deepEqual(plain(c.normalize([typed,group,personal,unit])).map(s=>[s.universeSongId,s.artist]),[['1001','BE:FIRST']]);
+  const legacy=[...header,'SongType','SoloMemberID','ArtistRef'];
+  const oldSolo=['1068','Personal','BE:FIRST','','','','FALSE','SOLO','M102','G1'];
+  assert.deepEqual(plain(c.normalize([legacy,[...row,'NORMAL','','G1'],oldSolo])).map(s=>s.universeSongId),['1001']);
+});
 test('invalid source, duplicate ID and empty reads cannot form a sync',()=>{
   const c=core();assert.throws(()=>c.normalize([header,row,row]));assert.throws(()=>c.normalize([header]));
   assert.throws(()=>c.normalize([['SongID'],['1001']]));
